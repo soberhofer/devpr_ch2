@@ -38,3 +38,20 @@ cd Challenge2_2025
 pip install torch==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
 ```
+
+# Usage
+To run the sound classification experiments, use the following command:
+
+```bash
+python train_crossval.py
+```
+This will start the training process using the MLP model and 5-fold cross-validation.
+
+## Results
+The model will output the classification results for each fold, including metrics such as accuracy and loss.
+
+To test all cross-validation folds use the following command:
+
+```bash
+python test_crossval.py results/EXPERIMENT_DIR
+```
