@@ -29,6 +29,7 @@ It is recommended to create a new environment:
 conda create -n challenge2 python=3.10
 conda activate challenge2
 
+
 Clone the repository and install the necessary dependencies:
 
 ```bash
