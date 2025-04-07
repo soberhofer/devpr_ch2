@@ -137,14 +137,14 @@ if __name__ == "__main__":
     pd.options.display.float_format = ('{:,' + float_fmt + '}').format
     runs_path = config.runs_path
     experiment_root = os.path.join(runs_path, str(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')))
-    if not os.path.exists(experiment_root):
-        os.mkdir(experiment_root)
+    os.makedirs(experiment_root, exist_ok=True)
 
     # for all folds
     scores = {}
     # expensive!
     #global_stats = get_global_stats(data_path)
     # for spectrograms
+    print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
     global_stats = np.array([[-54.364834, 20.853344],
                              [-54.279022, 20.847532],
                              [-54.18343, 20.80387],
