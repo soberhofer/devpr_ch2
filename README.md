@@ -28,7 +28,7 @@ It is recommended to create a new environment:
 ```bash
 conda create -n challenge2 python=3.10
 conda activate challenge2
-```bash
+```
 
 Clone the repository and install the necessary dependencies:
 
@@ -37,4 +37,4 @@ git clone https://github.com/yourusername/Challenge2_2025.git
 cd Challenge2_2025
 pip install torch==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
-```bash
+```
