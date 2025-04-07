@@ -11,7 +11,6 @@ import sys
 from functools import partial
 
 from models.model_classifier import AudioMLP
-from models.model_classifier import ResNet, ResidualBlock
 from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
 import config

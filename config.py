@@ -17,7 +17,7 @@ test_folds = [1, 2, 3, 4, 5]
 sr = 44100
 n_mels = 128
 hop_length = 512
-n_mfcc = 42
+#n_mfcc = 42
 
 model_constructor = "AudioMLP(n_steps=431,\
 n_mels=config.n_mels,\
