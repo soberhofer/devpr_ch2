@@ -1,2 +1,5 @@
 outputs
 results
+data
+.DS_Store
+*.pyc

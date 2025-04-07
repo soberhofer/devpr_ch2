@@ -8,9 +8,10 @@ import os
 import datetime
 from tqdm import tqdm
 import sys
+import argparse
 from functools import partial
 
-from models.model_classifier import AudioMLP
+from models.model_classifier import AudioMLP, AudioCNN, TFCNN
 from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
 import config
@@ -126,19 +127,49 @@ def fit_classifier():
 
 
 # build model from configuration.
-def make_model():
-    n = config.n_classes
-    model_constructor = config.model_constructor
-    print(model_constructor)
-    model = eval(model_constructor)
+def make_model(model_type, n_mels, output_size):
+    if model_type == 'AudioMLP':
+        model = AudioMLP(n_steps=431, n_mels=n_mels, hidden1_size=512, hidden2_size=256, output_size=output_size)
+    elif model_type == 'AudioCNN':
+        model = AudioCNN(n_mels=n_mels, output_size=output_size)
+    elif model_type == 'tfcnn':
+        model = TFCNN(num_classes=output_size)
+    else:
+        raise ValueError(f"Invalid model type: {model_type}")
     return model
 
 
 if __name__ == "__main__":
-    data_path = config.esc50_path
-    use_cuda = torch.cuda.is_available()
-    device = torch.device(f"cuda:{config.device_id}" if use_cuda else "cpu")
+    parser = argparse.ArgumentParser(description="ESC-50 training script")
+    parser.add_argument("--model_type", type=str, default="AudioMLP",
+                        choices=["AudioMLP", "AudioCNN", "tfcnn"],
+                        help="Type of model to use (AudioMLP or AudioCNN or tfcnn)")
+    args = parser.parse_args()
 
+    data_path = config.esc50_path
+    n_classes = config.n_classes
+    use_cuda = torch.cuda.is_available()
+
+    # prefer CUDA if available, otherwise try MPS, otherwise use CPU
+    if torch.cuda.is_available():
+        device = torch.device(f"cuda:{config.device_id}")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    print(f'device is {device}')
+
+    # digits for logging
+    float_fmt = ".3f"
+    pd.options.display.float_format = ('{:,' + float_fmt + '}').format
+    runs_path = config.runs_path
+    experiment_root = os.path.join(runs_path, str(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')))
+    os.makedirs(experiment_root, exist_ok=True)
+
+    # for all folds
+    scores = {}
+    # expensive!
+    #global_stats = get_global_stats(data_path)
     # digits for logging
     float_fmt = ".3f"
     pd.options.display.float_format = ('{:,' + float_fmt + '}').format
@@ -188,7 +219,7 @@ if __name__ == "__main__":
 
             print()
             # instantiate model
-            model = make_model()
+            model = make_model(args.model_type, config.n_mels, n_classes)
             # model = nn.DataParallel(model, device_ids=config.device_ids)
             model = model.to(device)
             print('*****')
