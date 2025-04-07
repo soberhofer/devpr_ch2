@@ -1,18 +1,13 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import dataloader
 import subprocess
 import pandas as pd
 import numpy as np
 import os
 import argparse
-import datetime
-from tqdm import tqdm
-import sys
 
 from dataset.dataset_ESC50 import ESC50, download_extract_zip
-from train_crossval import test, make_model
+from train_crossval import test, make_model, global_stats
 import config
 
 
@@ -42,13 +37,15 @@ if __name__ == "__main__":
     if not os.path.isdir(experiment_root):
         print('download model params')
         download_extract_zip(
-            url='https://cloud.technikum-wien.at/s/oJ5LTpAaJBpdABD/download/sample-run.zip',
+            #url='https://cloud.technikum-wien.at/s/9HTN27EADZXGJ72/download/sample-run.zip',
+            url='https://cloud.technikum-wien.at/s/PiHsFtnB69cqxPE/download/sample-run.zip',
             file_path=experiment_root + '.zip',
         )
 
 
     # instantiate model
     print('*****')
+    print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
     model = make_model()
     model = model.to(device)
     print('*****')
@@ -62,6 +59,7 @@ if __name__ == "__main__":
         experiment = os.path.join(experiment_root, f'{test_fold}')
 
         test_loader = torch.utils.data.DataLoader(ESC50(subset="test", test_folds={test_fold},
+                                                        global_mean_std=global_stats[test_fold - 1],
                                                         root=data_path, download=True),
                                                   batch_size=config.batch_size,
                                                   shuffle=False,

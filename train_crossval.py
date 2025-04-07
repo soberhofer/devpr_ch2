@@ -16,6 +16,13 @@ from dataset.dataset_ESC50 import ESC50
 import config
 
 
+# mean and std of train data for every fold
+global_stats = np.array([[-54.364834, 20.853344],
+                         [-54.279022, 20.847532],
+                         [-54.18343, 20.80387],
+                         [-54.223698, 20.798292],
+                         [-54.200905, 20.949806]])
+
 # evaluate model on different testing data 'dataloader'
 def test(model, dataloader, criterion, device):
     model.eval()
@@ -145,11 +152,6 @@ if __name__ == "__main__":
     #global_stats = get_global_stats(data_path)
     # for spectrograms
     print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
-    global_stats = np.array([[-54.364834, 20.853344],
-                             [-54.279022, 20.847532],
-                             [-54.18343, 20.80387],
-                             [-54.223698, 20.798292],
-                             [-54.200905, 20.949806]])
     for test_fold in config.test_folds:
         experiment = os.path.join(experiment_root, f'{test_fold}')
         if not os.path.exists(experiment):
