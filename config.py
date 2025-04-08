@@ -39,7 +39,7 @@ num_workers = 0
 # num_workers = 6#16
 persistent_workers = True
 persistent_workers = False
-epochs = 1
+epochs = 100
 #epochs = 1
 # early stopping after epochs with no improvement
 patience = 20
