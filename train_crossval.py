@@ -10,12 +10,20 @@ from tqdm import tqdm
 import sys
 import argparse
 from functools import partial
+import wandb
+import json
 
-from models.model_classifier import AudioMLP, AudioCNN, TFCNN
+
+
+from models.model_classifier import AudioMLP, AudioCNN, TFCNN, TFCNN2
 from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
 import config
 
+wandb.login(key="30ba9a82581fcf2602598fb2919c97f7396c8f17")
+
+# Initialize a new wandb run
+run = wandb.init(project="challenge2", name="model")
 
 # mean and std of train data for every fold
 global_stats = np.array([[-54.364834, 20.853344],
@@ -113,6 +121,13 @@ def fit_classifier():
             f"ValLoss={val_loss_avg:{float_fmt}}",
             end=' ')
 
+        wandb.log({
+            "ValLoss": val_loss_avg,
+            "ValAcc": val_acc,
+            "TrnLoss": np.mean(train_loss),
+            "TrnAcc": train_acc
+        })
+
         early_stop, improved = loss_stopping(val_loss_avg, model, epoch)
         if not improved:
             print()
@@ -124,6 +139,9 @@ def fit_classifier():
         scheduler.step()
     # save full model
     torch.save(model.state_dict(), os.path.join(experiment, 'terminal.pt'))
+    wandb.save(os.path.join(experiment, 'terminal.pt'))
+
+    run.finish()
 
 
 # build model from configuration.
@@ -134,6 +152,8 @@ def make_model(model_type, n_mels, output_size):
         model = AudioCNN(n_mels=n_mels, output_size=output_size)
     elif model_type == 'tfcnn':
         model = TFCNN(num_classes=output_size)
+    elif model_type == 'hpss':
+        model = TFCNN2(n_mels=config.n_mels, output_size=output_size)
     else:
         raise ValueError(f"Invalid model type: {model_type}")
     return model
@@ -142,8 +162,8 @@ def make_model(model_type, n_mels, output_size):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ESC-50 training script")
     parser.add_argument("--model_type", type=str, default="AudioMLP",
-                        choices=["AudioMLP", "AudioCNN", "tfcnn"],
-                        help="Type of model to use (AudioMLP or AudioCNN or tfcnn)")
+                        choices=["AudioMLP", "AudioCNN", "tfcnn", "hpss"],
+                        help="Type of model to use (AudioMLP or AudioCNN or tfcnn or hpss)")
     args = parser.parse_args()
 
     data_path = config.esc50_path
@@ -261,3 +281,4 @@ if __name__ == "__main__":
             print()
     scores = pd.concat(scores).unstack([-1])
     print(pd.concat((scores, scores.agg(['mean', 'std']))))
+    wandb.finish()
