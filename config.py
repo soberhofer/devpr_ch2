@@ -30,7 +30,7 @@ time_reduce=1)"
 # ratio to split off from training data
 val_size = .2  # could be changed
 device_id = 0
-batch_size = 32
+batch_size = 128
 # in Colab to avoid Warning
 num_workers = 2
 num_workers = 0
