@@ -30,9 +30,7 @@ args = parser.parse_args()
 
 #wandb.login(key="30ba9a82581fcf2602598fb2919c97f7396c8f17")
 
-# Initialize a new wandb run
-now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-run = wandb.init(project="challenge2", name=f"{args.model_type}-{now}-{args.comment}",)
+
 
 # mean and std of train data for every fold
 global_stats = np.array([[-54.364834, 20.853344],
@@ -211,6 +209,9 @@ if __name__ == "__main__":
     # for spectrograms
     print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
     for test_fold in config.test_folds:
+        # Initialize a new wandb run
+        now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        run = wandb.init(project="challenge2", name=f"{args.model_type}-{now}-{args.comment}-{test_fold}")
         experiment = os.path.join(experiment_root, f'{test_fold}')
         if not os.path.exists(experiment):
             os.mkdir(experiment)
