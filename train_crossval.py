@@ -20,10 +20,19 @@ from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
 import config
 
-wandb.login(key="30ba9a82581fcf2602598fb2919c97f7396c8f17")
+parser = argparse.ArgumentParser(description="ESC-50 training script")
+parser.add_argument("--model_type", type=str, default="AudioMLP",
+                    choices=["AudioMLP", "AudioCNN", "tfcnn", "hpss"],
+                    help="Type of model to use (AudioMLP or AudioCNN or tfcnn or hpss)")
+parser.add_argument("--comment", type=str, default="",
+                                        help="Comment for wandb logging")
+args = parser.parse_args()
+
+#wandb.login(key="30ba9a82581fcf2602598fb2919c97f7396c8f17")
 
 # Initialize a new wandb run
-run = wandb.init(project="challenge2", name="model")
+now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+run = wandb.init(project="challenge2", name=f"{args.model_type}-{now}-{args.comment}",)
 
 # mean and std of train data for every fold
 global_stats = np.array([[-54.364834, 20.853344],
@@ -116,7 +125,7 @@ def fit_classifier():
         lr = scheduler.get_last_lr()
         print(end=' ')
         print(  # f" Epoch: {epoch}/{num_epochs}",
-            f"LR:{lr[0]:{float_fmt}}",
+            f"LR:{lr[0]:.3e}",
             f"TrnAcc={train_acc:{float_fmt}}",
             f"ValAcc={val_acc:{float_fmt}}",
             f"TrnLoss={np.mean(train_loss):{float_fmt}}",
@@ -128,7 +137,7 @@ def fit_classifier():
             "ValLoss": val_loss_avg,
             "ValAcc": val_acc,
             "TrnLoss": np.mean(train_loss),
-            "TrnAcc": train_acc
+            "TrnAcc": train_acc,
         })
 
         early_stop, improved = loss_stopping(val_loss_avg, model, epoch)
@@ -163,11 +172,6 @@ def make_model(model_type, n_mels, output_size):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="ESC-50 training script")
-    parser.add_argument("--model_type", type=str, default="AudioMLP",
-                        choices=["AudioMLP", "AudioCNN", "tfcnn", "hpss"],
-                        help="Type of model to use (AudioMLP or AudioCNN or tfcnn or hpss)")
-    args = parser.parse_args()
 
     data_path = config.esc50_path
     n_classes = config.n_classes
@@ -263,6 +267,12 @@ if __name__ == "__main__":
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
                                                         step_size=config.step_size,
                                                         gamma=config.gamma)
+            scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=1.5e-3,  # Peak LR 
+            total_steps=config.epochs,# * len(train_loader),  # Total training steps
+            pct_start=0.1,  # Warmup phase (10% of steps)
+)
 
             # fit the model using only training and validation data, no testing data allowed here
             print()
