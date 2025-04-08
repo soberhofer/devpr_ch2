@@ -113,8 +113,10 @@ def fit_classifier():
         pbar.update()
         # pbar.refresh() syncs output when pbar on stderr
         # pbar.refresh()
+        lr = scheduler.get_last_lr()
         print(end=' ')
         print(  # f" Epoch: {epoch}/{num_epochs}",
+            f"LR:{lr[0]:{float_fmt}}",
             f"TrnAcc={train_acc:{float_fmt}}",
             f"ValAcc={val_acc:{float_fmt}}",
             f"TrnLoss={np.mean(train_loss):{float_fmt}}",
@@ -122,6 +124,7 @@ def fit_classifier():
             end=' ')
 
         wandb.log({
+            "LearningRate": lr[0],
             "ValLoss": val_loss_avg,
             "ValAcc": val_acc,
             "TrnLoss": np.mean(train_loss),
@@ -259,7 +262,7 @@ if __name__ == "__main__":
 
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
                                                         step_size=config.step_size,
-                                                        gamma=config.gamma, verbose=config.scheduler_verbose)
+                                                        gamma=config.gamma)
 
             # fit the model using only training and validation data, no testing data allowed here
             print()
