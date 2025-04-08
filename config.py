@@ -47,6 +47,7 @@ weight_decay = 1e-3
 warm_epochs = 10
 gamma = 0.8
 step_size = 5
+optimizer = 'Adam'
 
 # ### TESTING
 # model checkpoints loaded for testing
