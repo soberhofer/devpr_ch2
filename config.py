@@ -5,6 +5,7 @@ runs_path = 'results'
 # sub-epoch (batch-level) progress bar display
 disable_bat_pbar = True
 #disable_bat_pbar = True
+scheduler_verbose = True
 
 # do not change this block
 n_classes = 50

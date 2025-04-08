@@ -259,7 +259,7 @@ if __name__ == "__main__":
 
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
                                                         step_size=config.step_size,
-                                                        gamma=config.gamma)
+                                                        gamma=config.gamma, verbose=config.scheduler_verbose)
 
             # fit the model using only training and validation data, no testing data allowed here
             print()
