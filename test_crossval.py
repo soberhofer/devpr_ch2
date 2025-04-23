@@ -16,7 +16,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('cvpath', nargs='?', default=config.test_experiment)
     parser.add_argument("--model_type", type=str, default="AudioMLP",
-                    choices=["AudioMLP", "AudioCNN", "tfcnn", "hpss"],
+                    choices=["AudioMLP", "AudioCNN", "tfcnn", "hpss", "tfnet", "tfnet_cnn"],
                     help="Type of model to use (AudioMLP or AudioCNN or tfcnn or hpss)")
     args = parser.parse_args()
 
