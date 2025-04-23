@@ -141,6 +141,7 @@ class ESC50(data.Dataset):
         class_id = int(temp.split('-')[-1])
         if not index in self.cache_dict:
             wave, rate = librosa.load(path, sr=config.sr)
+            self.cache_dict[index] = wave
         else:   
             wave = self.cache_dict[index]
             rate = config.sr
