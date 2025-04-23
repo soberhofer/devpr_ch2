@@ -56,7 +56,7 @@ if __name__ == "__main__":
     # instantiate model
     print('*****')
     print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
-    model = make_model()
+    #model = make_model()
     model = make_model(args.model_type, config.n_mels, config.n_classes)
     model = model.to(device)
     print('*****')
