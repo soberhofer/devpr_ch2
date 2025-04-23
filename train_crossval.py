@@ -280,6 +280,7 @@ if __name__ == "__main__":
 
             # fit the model using only training and validation data, no testing data allowed here
             print()
+            print(f"Number of parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
             fit_classifier()
 
             # tests
