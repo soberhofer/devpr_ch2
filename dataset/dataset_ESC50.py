@@ -141,53 +141,56 @@ class ESC50(data.Dataset):
         class_id = int(temp.split('-')[-1])
         if not index in self.cache_dict:
             wave, rate = librosa.load(path, sr=config.sr)
-            self.cache_dict[index] = wave
+            if wave.ndim == 1:
+                wave = wave[:, np.newaxis]
+
+            # normalizing waves to [-1, 1]
+            if np.abs(wave.max()) > 1.0:
+                wave = transforms.scale(wave, wave.min(), wave.max(), -1.0, 1.0)
+            wave = wave.T * 32768.0
+
+            # Remove silent sections
+            start = wave.nonzero()[1].min()
+            end = wave.nonzero()[1].max()
+            wave = wave[:, start: end + 1]
+
+            wave_copy = np.copy(wave)
+            wave_copy = self.wave_transforms(wave_copy)
+            wave_copy.squeeze_(0)
+
+            if self.n_mfcc:
+                mfcc = librosa.feature.mfcc(y=wave_copy.numpy(),
+                                            sr=config.sr,
+                                            n_mels=config.n_mels,
+                                            n_fft=1024,
+                                            hop_length=config.hop_length,
+                                            n_mfcc=self.n_mfcc)
+                feat = mfcc
+            else:
+                s = librosa.feature.melspectrogram(y=wave_copy.numpy(),
+                                                sr=config.sr,
+                                                n_mels=config.n_mels,
+                                                n_fft=1024,
+                                                hop_length=config.hop_length,
+                                                #center=False,
+                                                )
+                log_s = librosa.power_to_db(s, ref=np.max)
+
+                # masking the spectrograms
+                log_s = self.spec_transforms(log_s)
+
+                feat = log_s
+
+            # normalize
+            if self.global_mean:
+                feat = (feat - self.global_mean) / self.global_std
+            # add to cache
+            self.cache_dict[index] = (file_name, feat, class_id)
         else:   
-            wave = self.cache_dict[index]
-            rate = config.sr
-        if wave.ndim == 1:
-            wave = wave[:, np.newaxis]
-
-        # normalizing waves to [-1, 1]
-        if np.abs(wave.max()) > 1.0:
-            wave = transforms.scale(wave, wave.min(), wave.max(), -1.0, 1.0)
-        wave = wave.T * 32768.0
-
-        # Remove silent sections
-        start = wave.nonzero()[1].min()
-        end = wave.nonzero()[1].max()
-        wave = wave[:, start: end + 1]
-
-        wave_copy = np.copy(wave)
-        wave_copy = self.wave_transforms(wave_copy)
-        wave_copy.squeeze_(0)
-
-        if self.n_mfcc:
-            mfcc = librosa.feature.mfcc(y=wave_copy.numpy(),
-                                        sr=config.sr,
-                                        n_mels=config.n_mels,
-                                        n_fft=1024,
-                                        hop_length=config.hop_length,
-                                        n_mfcc=self.n_mfcc)
-            feat = mfcc
-        else:
-            s = librosa.feature.melspectrogram(y=wave_copy.numpy(),
-                                               sr=config.sr,
-                                               n_mels=config.n_mels,
-                                               n_fft=1024,
-                                               hop_length=config.hop_length,
-                                               #center=False,
-                                               )
-            log_s = librosa.power_to_db(s, ref=np.max)
-
-            # masking the spectrograms
-            log_s = self.spec_transforms(log_s)
-
-            feat = log_s
-
-        # normalize
-        if self.global_mean:
-            feat = (feat - self.global_mean) / self.global_std
+            file_name, feat, class_id = self.cache_dict[index]
+            #rate = config.sr
+        
+        
 
         return file_name, feat, class_id
 
