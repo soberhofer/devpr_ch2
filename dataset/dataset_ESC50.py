@@ -141,7 +141,6 @@ class ESC50(data.Dataset):
         class_id = int(temp.split('-')[-1])
         if not index in self.cache_dict:
             wave, rate = librosa.load(path, sr=config.sr)
-            self.cache_dict[index] = wave
         else:
             wave = self.cache_dict[index]
 
@@ -161,6 +160,7 @@ class ESC50(data.Dataset):
         wave_copy = np.copy(wave)
         wave_copy = self.wave_transforms(wave_copy)
         wave_copy.squeeze_(0)
+        self.cache_dict[index] = wave_copy
 
         if self.n_mfcc:
             mfcc = librosa.feature.mfcc(y=wave_copy.numpy(),
