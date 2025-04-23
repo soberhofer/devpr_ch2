@@ -23,7 +23,7 @@ import config
 
 parser = argparse.ArgumentParser(description="ESC-50 training script")
 parser.add_argument("--model_type", type=str, default="AudioMLP",
-                    choices=["AudioMLP", "AudioCNN", "tfcnn", "hpss", "tfcnn_orig"],
+                    choices=["AudioMLP", "AudioCNN", "tfcnn", "hpss", "tfnet"],
                     help="Type of model to use (AudioMLP or AudioCNN or tfcnn or hpss)")
 parser.add_argument("--comment", type=str, default="",
                                         help="Comment for wandb logging")
