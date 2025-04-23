@@ -16,13 +16,14 @@ import json
 
 
 from models.model_classifier import AudioMLP, AudioCNN, TFCNN, TFCNN2
+from models.tfcnn import Cnn
 from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
 import config
 
 parser = argparse.ArgumentParser(description="ESC-50 training script")
 parser.add_argument("--model_type", type=str, default="AudioMLP",
-                    choices=["AudioMLP", "AudioCNN", "tfcnn", "hpss"],
+                    choices=["AudioMLP", "AudioCNN", "tfcnn", "hpss", "tfcnn_orig"],
                     help="Type of model to use (AudioMLP or AudioCNN or tfcnn or hpss)")
 parser.add_argument("--comment", type=str, default="",
                                         help="Comment for wandb logging")
@@ -164,6 +165,8 @@ def make_model(model_type, n_mels, output_size):
         model = TFCNN(num_classes=output_size)
     elif model_type == 'hpss':
         model = TFCNN2(n_mels=config.n_mels, output_size=output_size)
+    elif model_type == 'tfcnn_orig':
+        model = Cnn(classes_num=output_size)#, in_channels=1)
     else:
         raise ValueError(f"Invalid model type: {model_type}")
     return model

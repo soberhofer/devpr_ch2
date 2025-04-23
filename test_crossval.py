@@ -15,12 +15,22 @@ if __name__ == "__main__":
     # optional: the test cross validation path can be specified from command line
     parser = argparse.ArgumentParser()
     parser.add_argument('cvpath', nargs='?', default=config.test_experiment)
+    parser.add_argument("--model_type", type=str, default="AudioMLP",
+                    choices=["AudioMLP", "AudioCNN", "tfcnn", "hpss"],
+                    help="Type of model to use (AudioMLP or AudioCNN or tfcnn or hpss)")
     args = parser.parse_args()
 
     reproducible = False
     data_path = config.esc50_path
     use_cuda = torch.cuda.is_available()
-    device = torch.device(f"cuda:{config.device_id}" if use_cuda else "cpu")
+    use_mps = torch.backends.mps.is_available()
+    if use_cuda:
+        device = torch.device(f"cuda:{config.device_id}" if use_cuda else "cpu")
+    elif use_mps:
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    print(f"Using device: {device}")
 
     check_data_reproducibility = False
     if reproducible:
@@ -46,7 +56,8 @@ if __name__ == "__main__":
     # instantiate model
     print('*****')
     print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
-    model = make_model()
+    #model = make_model()
+    model = make_model(args.model_type, config.n_mels, config.n_classes)
     model = model.to(device)
     print('*****')
 
