@@ -33,7 +33,7 @@ val_size = .2  # could be changed
 device_id = 0
 batch_size = 128
 # in Colab to avoid Warning
-num_workers = 2
+num_workers = 0
 #num_workers = 0
 # for local Windows or Linux machine
 # num_workers = 6#16
