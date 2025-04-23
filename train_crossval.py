@@ -54,10 +54,13 @@ def test(model, dataloader, criterion, device):
             x = x.float().to(device)
             y_true = label.to(device)
 
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
+                y_prob = model(x)
+                loss = criterion(y_prob, y_true)
             # the forward pass through the model
-            y_prob = model(x)
+            #y_prob = model(x)
 
-            loss = criterion(y_prob, y_true)
+            #loss = criterion(y_prob, y_true)
             losses.append(loss.item())
 
             y_pred = torch.argmax(y_prob, dim=1)
