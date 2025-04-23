@@ -171,7 +171,7 @@ def make_model(model_type, n_mels, output_size):
     elif model_type == 'tfnet':
         model = TFNet(classes_num=output_size)#, in_channels=1)
     elif model_type == 'tfnet_cnn':
-        model = Cnn(classes_num=output_size, in_channels=1)
+        model = Cnn(classes_num=output_size)
     else:
         raise ValueError(f"Invalid model type: {model_type}")
     return model
