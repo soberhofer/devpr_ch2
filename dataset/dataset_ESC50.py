@@ -69,6 +69,7 @@ class ESC50(data.Dataset):
             download_extract_zip(url, file_path)
 
         self.root = audio
+        self.cache_dict = dict()
         # getting name of all files inside the all the train_folds
         temp = sorted(os.listdir(self.root))
         folds = {int(v.split('-')[0]) for v in temp}
@@ -97,7 +98,9 @@ class ESC50(data.Dataset):
                 torch.Tensor,
                 #transforms.RandomScale(max_scale=1.25),
                 transforms.RandomPadding(out_len=out_len),
-                transforms.RandomCrop(out_len=out_len)
+                transforms.RandomCrop(out_len=out_len),
+                transforms.TimeMask(),
+                transforms.FrequencyMask(),
             )
 
             self.spec_transforms = transforms.Compose(
@@ -131,11 +134,16 @@ class ESC50(data.Dataset):
     def __getitem__(self, index):
         file_name = self.file_names[index]
         path = os.path.join(self.root, file_name)
-        wave, rate = librosa.load(path, sr=config.sr)
+        
 
         # identifying the label of the sample from its name
         temp = file_name.split('.')[0]
         class_id = int(temp.split('-')[-1])
+        if not index in self.cache_dict:
+            wave, rate = librosa.load(path, sr=config.sr)
+            self.cache_dict[index] = wave
+        else:
+            wave = self.cache_dict[index]
 
         if wave.ndim == 1:
             wave = wave[:, np.newaxis]
