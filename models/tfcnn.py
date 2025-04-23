@@ -5,6 +5,8 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.nn.utils import weight_norm
 
+#Source: https://github.com/Hadryan/TFNet-for-Environmental-Sound-Classification/raw/refs/heads/master/util_esc50/net.py
+
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         

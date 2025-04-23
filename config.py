@@ -3,7 +3,7 @@ esc50_path = 'data/esc50'
 
 runs_path = 'results'
 # sub-epoch (batch-level) progress bar display
-disable_bat_pbar = False
+disable_bat_pbar = True
 #disable_bat_pbar = True
 scheduler_verbose = True
 
@@ -34,7 +34,7 @@ device_id = 0
 batch_size = 128
 # in Colab to avoid Warning
 num_workers = 2
-num_workers = 0
+#num_workers = 0
 # for local Windows or Linux machine
 # num_workers = 6#16
 persistent_workers = True

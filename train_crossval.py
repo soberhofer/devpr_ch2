@@ -16,7 +16,7 @@ import json
 
 
 from models.model_classifier import AudioMLP, AudioCNN, TFCNN, TFCNN2
-from models.tfcnn import Cnn
+from models.tfcnn import TFNet
 from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
 import config
@@ -165,8 +165,8 @@ def make_model(model_type, n_mels, output_size):
         model = TFCNN(num_classes=output_size)
     elif model_type == 'hpss':
         model = TFCNN2(n_mels=config.n_mels, output_size=output_size)
-    elif model_type == 'tfcnn_orig':
-        model = Cnn(classes_num=output_size)#, in_channels=1)
+    elif model_type == 'tfnet':
+        model = TFNet(classes_num=output_size)#, in_channels=1)
     else:
         raise ValueError(f"Invalid model type: {model_type}")
     return model
