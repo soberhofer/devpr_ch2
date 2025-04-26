@@ -256,8 +256,17 @@ def main(cfg: DictConfig):
 
             # --- Data Loading ---
             # Use absolute data path and cfg for parameters
-            get_fold_dataset = partial(ESC50, root=data_path, download=True,
-                                       test_folds={test_fold}, global_mean_std=global_stats[test_fold - 1]) # Still using hardcoded stats
+            # Pass required parameters from cfg to ESC50 constructor via partial
+            get_fold_dataset = partial(ESC50,
+                                       root=data_path,
+                                       sr=cfg.data.sr,
+                                       n_mels=cfg.data.n_mels,
+                                       hop_length=cfg.data.hop_length,
+                                       val_size=cfg.training.val_size,
+                                       # n_mfcc=cfg.data.get('n_mfcc', None), # Pass n_mfcc if defined in data config
+                                       download=True, # Keep download=True? Or make configurable?
+                                       test_folds={test_fold},
+                                       global_mean_std=global_stats[test_fold - 1]) # Still using hardcoded stats
 
             train_set = get_fold_dataset(subset="train")
             print('*****')

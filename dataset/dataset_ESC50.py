@@ -9,7 +9,7 @@ from functools import partial
 import numpy as np
 import librosa
 
-import config
+# import config # Removed old config import
 from . import transforms
 
 # CUDA for PyTorch
@@ -51,11 +51,18 @@ def download_progress(current, total, width=80):
 
 
 class ESC50(data.Dataset):
-
-    def __init__(self, root, test_folds=frozenset((1,)), subset="train", global_mean_std=(0.0, 0.0), download=False):
+    # Added sr, n_mels, hop_length, val_size, n_mfcc parameters
+    def __init__(self, root, sr, n_mels, hop_length, val_size, n_mfcc=None,
+                 test_folds=frozenset((1,)), subset="train", global_mean_std=(0.0, 0.0), download=False):
         audio = 'ESC-50-master/audio'
         root = os.path.normpath(root)
         audio = os.path.join(root, audio)
+        # Store parameters
+        self.sr = sr
+        self.n_mels = n_mels
+        self.hop_length = hop_length
+        self.val_size = val_size
+        self.n_mfcc = n_mfcc
         if subset in {"train", "test", "val"}:
             self.subset = subset
         else:
@@ -82,14 +89,20 @@ class ESC50(data.Dataset):
         if subset == "test":
             self.file_names = test_files
         else:
-            if config.val_size:
-                train_files, val_files = train_test_split(train_files, test_size=config.val_size, random_state=0)
+            # Use self.val_size passed during init
+            if self.val_size > 0:
+                 # Use self.val_size
+                train_files, val_files = train_test_split(train_files, test_size=self.val_size, random_state=0)
+            else: # Handle case where val_size is 0 or None
+                val_files = [] # Ensure val_files is defined even if not splitting
             if subset == "train":
                 self.file_names = train_files
-            else:
+            elif subset == "val": # Explicitly check for "val" subset
                 self.file_names = val_files
+            # Removed the final 'else' as subset is validated earlier
         # the number of samples in the wave (=length) required for spectrogram
-        out_len = int(((config.sr * 5) // config.hop_length) * config.hop_length)
+        # Use self.sr and self.hop_length
+        out_len = int(((self.sr * 5) // self.hop_length) * self.hop_length)
         train = self.subset == "train"
         if train:
             # augment training data with transformations that include randomness
@@ -126,7 +139,7 @@ class ESC50(data.Dataset):
             )
         self.global_mean = global_mean_std[0]
         self.global_std = global_mean_std[1]
-        self.n_mfcc = config.n_mfcc if hasattr(config, "n_mfcc") else None
+        # self.n_mfcc is already set in __init__
 
     def __len__(self):
         return len(self.file_names)
@@ -140,7 +153,8 @@ class ESC50(data.Dataset):
         temp = file_name.split('.')[0]
         class_id = int(temp.split('-')[-1])
         if not index in self.cache_dict:
-            wave, rate = librosa.load(path, sr=config.sr)
+            # Use self.sr
+            wave, rate = librosa.load(path, sr=self.sr)
             if wave.ndim == 1:
                 wave = wave[:, np.newaxis]
 
@@ -159,19 +173,21 @@ class ESC50(data.Dataset):
             wave_copy.squeeze_(0)
 
             if self.n_mfcc:
+                # Use self.sr, self.n_mels, self.hop_length
                 mfcc = librosa.feature.mfcc(y=wave_copy.numpy(),
-                                            sr=config.sr,
-                                            n_mels=config.n_mels,
-                                            n_fft=1024,
-                                            hop_length=config.hop_length,
+                                            sr=self.sr,
+                                            n_mels=self.n_mels,
+                                            n_fft=1024, # Keep n_fft hardcoded? Or add to config?
+                                            hop_length=self.hop_length,
                                             n_mfcc=self.n_mfcc)
                 feat = mfcc
             else:
+                 # Use self.sr, self.n_mels, self.hop_length
                 s = librosa.feature.melspectrogram(y=wave_copy.numpy(),
-                                                sr=config.sr,
-                                                n_mels=config.n_mels,
-                                                n_fft=1024,
-                                                hop_length=config.hop_length,
+                                                sr=self.sr,
+                                                n_mels=self.n_mels,
+                                                n_fft=1024, # Keep n_fft hardcoded?
+                                                hop_length=self.hop_length,
                                                 #center=False,
                                                 )
                 log_s = librosa.power_to_db(s, ref=np.max)
@@ -195,10 +211,18 @@ class ESC50(data.Dataset):
         return file_name, feat, class_id
 
 
-def get_global_stats(data_path):
-    res = []
-    for i in range(1, 6):
-        train_set = ESC50(subset="train", test_folds={i}, root=data_path, download=True)
-        a = torch.concatenate([v[1] for v in tqdm(train_set)])
-        res.append((a.mean(), a.std()))
-    return np.array(res)
+# def get_global_stats(data_path):
+#     # This function needs refactoring to load config (e.g., sr, n_mels, etc.)
+#     # if it's intended to be run standalone. Commenting out for now as
+#     # train_crossval.py uses hardcoded stats.
+#     res = []
+#     # Required params for ESC50: root, sr, n_mels, hop_length, val_size
+#     # These need to be loaded from a config source here.
+#     # Example placeholder: sr, n_mels, hop_length, val_size = load_defaults()
+#     for i in range(1, 6):
+#         # train_set = ESC50(subset="train", test_folds={i}, root=data_path, download=True,
+#         #                   sr=sr, n_mels=n_mels, hop_length=hop_length, val_size=val_size)
+#         # a = torch.concatenate([v[1] for v in tqdm(train_set)])
+#         # res.append((a.mean(), a.std()))
+#     # return np.array(res)
+#     pass # Keep function defined but do nothing
