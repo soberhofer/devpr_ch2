@@ -1,0 +1,14 @@
+# Repo/conf/model/default.yaml
+# Default model configuration
+
+name: AudioMLP # Name of the model class/constructor
+
+# Parameters for the AudioMLP model
+# Note: n_mels and output_size are interpolated from the data config
+params:
+  n_steps: 431       # Hardcoded from original config.py, might need adjustment based on data processing
+  n_mels: ${data.n_mels} # Interpolated from data config
+  hidden1_size: 512
+  hidden2_size: 128
+  output_size: ${data.n_classes} # Interpolated from data config
+  time_reduce: 1

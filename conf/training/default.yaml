@@ -1,0 +1,29 @@
+# Repo/conf/training/default.yaml
+# Default training parameters
+
+# Data splitting and loading
+val_size: 0.2
+batch_size: 128
+num_workers: 2 # Adjusted for Colab/general use, was 6/16 in original comments
+persistent_workers: true # Was false in original comments
+
+# Training loop
+epochs: 100
+patience: 20 # Early stopping patience
+
+# Optimizer settings
+optimizer: Adam
+lr: 1e-3
+weight_decay: 1e-3
+
+# Scheduler settings
+scheduler:
+  type: StepLR # Assuming StepLR based on gamma/step_size, adjust if different
+  step_size: 5
+  gamma: 0.8
+  warm_epochs: 10 # Parameter for potential warmup phase
+  verbose: true
+
+# Hardware and display
+device_id: 0
+disable_bat_pbar: true # Progress bar display

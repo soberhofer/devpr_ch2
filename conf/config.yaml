@@ -1,0 +1,20 @@
+# Repo/conf/config.yaml
+defaults:
+  - data: esc50      # Default dataset configuration
+  - model: default     # Default model configuration
+  - training: default  # Default training parameters
+  - testing: default   # Default testing parameters
+  - _self_           # Allows overriding defaults from this file or command line
+
+# General paths or settings
+runs_path: 'results' # Base directory for saving experiment results
+
+# Hydra specific settings for output directories
+hydra:
+  run:
+    # Output directory for single runs: results/YYYY-MM-DD-HH-MM-SS
+    dir: ${runs_path}/${now:%Y-%m-%d-%H-%M-%S}
+  sweep:
+    # Output directory for multi-runs (sweeps): results/multirun/YYYY-MM-DD_HH-MM-SS/JOB_NUM
+    dir: ${runs_path}/multirun/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${hydra.job.num}

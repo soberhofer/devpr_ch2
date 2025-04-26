@@ -1,0 +1,13 @@
+# Repo/conf/testing/default.yaml
+# Default testing parameters
+
+# Experiment to load checkpoints from
+# Note: This might be better handled dynamically or via command-line override
+experiment_dir: 'results/sample-run'
+
+# Checkpoints to load for testing within the experiment_dir
+checkpoints: ['terminal.pt'] # Was ['terminal.pt', 'best_val_loss.pt'] in original comments
+
+# Batch size for testing (can be different from training)
+# If not specified, could potentially reuse training.batch_size
+# batch_size: 128 # Example if you want a specific test batch size

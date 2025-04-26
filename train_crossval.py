@@ -8,10 +8,13 @@ import os
 import datetime
 from tqdm import tqdm
 import sys
-import argparse
+# import argparse # Removed argparse
 from functools import partial
 import wandb
 import json
+import hydra
+from omegaconf import DictConfig, OmegaConf
+import hydra.utils as hyu # Use hyu for hydra utils
 
 
 
@@ -19,17 +22,7 @@ from models.model_classifier import AudioMLP, AudioCNN, TFCNN, TFCNN2
 from models.tfcnn import TFNet, Cnn
 from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
-import config
-
-parser = argparse.ArgumentParser(description="ESC-50 training script")
-parser.add_argument("--model_type", type=str, default="AudioMLP",
-                    choices=["AudioMLP", "AudioCNN", "tfcnn", "hpss", "tfnet", "tfnet_cnn"],
-                    help="Type of model to use (AudioMLP or AudioCNN or tfcnn or hpss)")
-parser.add_argument("--comment", type=str, default="",
-                                        help="Comment for wandb logging")
-args = parser.parse_args()
-
-#wandb.login(key="30ba9a82581fcf2602598fb2919c97f7396c8f17")
+# import config # Removed old config import
 
 
 
@@ -41,7 +34,8 @@ global_stats = np.array([[-54.364834, 20.853344],
                          [-54.200905, 20.949806]])
 
 # evaluate model on different testing data 'dataloader'
-def test(model, dataloader, criterion, device):
+# Added cfg parameter
+def test(cfg: DictConfig, model, dataloader, criterion, device):
     model.eval()
 
     losses = []
@@ -50,7 +44,7 @@ def test(model, dataloader, criterion, device):
     probs = {}
     with torch.no_grad():
         # no gradient computation needed
-        for k, x, label in tqdm(dataloader, unit='bat', disable=config.disable_bat_pbar, position=0):
+        for k, x, label in tqdm(dataloader, unit='bat', disable=cfg.training.disable_bat_pbar, position=0): # Use cfg
             x = x.float().to(device)
             y_true = label.to(device)
 
@@ -73,14 +67,15 @@ def test(model, dataloader, criterion, device):
     return acc, losses, probs
 
 
-def train_epoch():
+# Added cfg, model, train_loader, criterion, optimizer parameters
+def train_epoch(cfg: DictConfig, model, train_loader, criterion, optimizer, device):
     # switch to training
     model.train()
 
     losses = []
     corrects = 0
     samples_count = 0
-    for _, x, label in tqdm(train_loader, unit='bat', disable=config.disable_bat_pbar, position=0):
+    for _, x, label in tqdm(train_loader, unit='bat', disable=cfg.training.disable_bat_pbar, position=0): # Use cfg
         x = x.float().to(device)
         y_true = label.to(device)
 
@@ -105,19 +100,26 @@ def train_epoch():
     return acc, losses
 
 
-def fit_classifier():
-    num_epochs = config.epochs
+# Added cfg, model, train_loader, val_loader, criterion, optimizer, scheduler, device, experiment_dir, float_fmt parameters
+def fit_classifier(cfg: DictConfig, model, train_loader, val_loader, criterion, optimizer, scheduler, device, experiment_dir, float_fmt):
+    num_epochs = cfg.training.epochs # Use cfg
 
-    loss_stopping = EarlyStopping(patience=config.patience, delta=0.002, verbose=True, float_fmt=float_fmt,
-                                  checkpoint_file=os.path.join(experiment, 'best_val_loss.pt'))
+    # Use Hydra's current working directory for checkpoints
+    best_val_loss_path = os.path.join(experiment_dir, 'best_val_loss.pt')
+    terminal_path = os.path.join(experiment_dir, 'terminal.pt')
+
+    loss_stopping = EarlyStopping(patience=cfg.training.patience, delta=0.002, verbose=True, float_fmt=float_fmt, # Use cfg
+                                  checkpoint_file=best_val_loss_path) # Use updated path
 
     pbar = tqdm(range(1, 1 + num_epochs), ncols=50, unit='ep', file=sys.stdout, ascii=True)
     for epoch in (range(1, 1 + num_epochs)):
         # iterate once over training data
-        train_acc, train_loss = train_epoch()
+        # Pass necessary arguments to train_epoch
+        train_acc, train_loss = train_epoch(cfg, model, train_loader, criterion, optimizer, device)
 
         # validate model
-        val_acc, val_loss, _ = test(model, val_loader, criterion=criterion, device=device)
+        # Pass cfg to test function
+        val_acc, val_loss, _ = test(cfg, model, val_loader, criterion=criterion, device=device)
         val_loss_avg = np.mean(val_loss)
 
         # print('\n')
@@ -152,156 +154,237 @@ def fit_classifier():
         # advance the optimization scheduler
         scheduler.step()
     # save full model
-    torch.save(model.state_dict(), os.path.join(experiment, 'terminal.pt'))
-    wandb.save(os.path.join(experiment, 'terminal.pt'))
+    torch.save(model.state_dict(), terminal_path) # Use updated path
+    # wandb.save(terminal_path) # Wandb automatically saves files in its run dir, this might be redundant
 
-    run.finish()
+    # run.finish() # Wandb run finishing is handled outside this function now
 
 
-# build model from configuration.
-def make_model(model_type, n_mels, output_size):
+# build model from configuration using cfg
+def make_model(cfg: DictConfig):
+    model_type = cfg.model.name
+    params = cfg.model.params
+    # n_mels and output_size are interpolated in the config file itself
+    # No need to pass them separately if using ${data.n_mels} and ${data.n_classes}
+
     if model_type == 'AudioMLP':
-        model = AudioMLP(n_steps=431, n_mels=n_mels, hidden1_size=512, hidden2_size=256, output_size=output_size)
+        # Pass parameters directly from cfg.model.params
+        model = AudioMLP(n_steps=params.n_steps, n_mels=params.n_mels,
+                         hidden1_size=params.hidden1_size, hidden2_size=params.hidden2_size,
+                         output_size=params.output_size, time_reduce=params.time_reduce)
     elif model_type == 'AudioCNN':
-        model = AudioCNN(n_mels=n_mels, output_size=output_size)
+         # Assuming AudioCNN takes n_mels and output_size, adjust if needed
+        model = AudioCNN(n_mels=params.n_mels, output_size=params.output_size)
     elif model_type == 'tfcnn':
-        model = TFCNN(num_classes=output_size)
+        # Assuming TFCNN takes num_classes, adjust if needed
+        model = TFCNN(num_classes=params.output_size)
     elif model_type == 'hpss':
-        model = TFCNN2(n_mels=config.n_mels, output_size=output_size)
+         # Assuming TFCNN2 takes n_mels and output_size, adjust if needed
+        model = TFCNN2(n_mels=params.n_mels, output_size=params.output_size)
     elif model_type == 'tfnet':
-        model = TFNet(classes_num=output_size)#, in_channels=1)
+        # Assuming TFNet takes classes_num, adjust if needed
+        model = TFNet(classes_num=params.output_size) #, in_channels=1)
     elif model_type == 'tfnet_cnn':
-        model = Cnn(classes_num=output_size)
+        # Assuming Cnn takes classes_num, adjust if needed
+        model = Cnn(classes_num=params.output_size)
     else:
-        raise ValueError(f"Invalid model type: {model_type}")
+        raise ValueError(f"Invalid model type in config: {model_type}")
     return model
 
 
-if __name__ == "__main__":
+# Main training logic wrapped in a function decorated by Hydra
+@hydra.main(config_path="conf", config_name="config", version_base=None)
+def main(cfg: DictConfig):
+    # Print the configuration - useful for debugging
+    print(OmegaConf.to_yaml(cfg))
 
-    data_path = config.esc50_path
-    n_classes = config.n_classes
-    use_cuda = torch.cuda.is_available()
+    # --- Setup ---
+    # Use absolute path for data relative to the original working directory
+    # Hydra changes the working directory, so we need this.
+    data_path = hyu.to_absolute_path(cfg.data.path)
+    n_classes = cfg.data.n_classes # Use cfg
 
-    # prefer CUDA if available, otherwise try MPS, otherwise use CPU
+    # Determine device
     if torch.cuda.is_available():
-        device = torch.device(f"cuda:{config.device_id}")
+        device = torch.device(f"cuda:{cfg.training.device_id}") # Use cfg
     elif torch.backends.mps.is_available():
         device = torch.device("mps")
     else:
         device = torch.device("cpu")
-    print(f'device is {device}')
+    print(f'Using device: {device}')
 
-    # digits for logging
+    # Formatting for logs
     float_fmt = ".3f"
     pd.options.display.float_format = ('{:,' + float_fmt + '}').format
-    runs_path = config.runs_path
-    experiment_root = os.path.join(runs_path, str(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')))
-    os.makedirs(experiment_root, exist_ok=True)
 
-    # for all folds
+    # Hydra automatically creates and manages the output directory (current working directory)
+    # No need for experiment_root or manually creating fold directories within the script
+    # The output directory for the current fold will be the CWD set by Hydra.
+    # We can get the original CWD if needed: original_cwd = hyu.get_original_cwd()
+
+    # --- Cross-validation Loop ---
     scores = {}
-    # expensive!
-    #global_stats = get_global_stats(data_path)
-    # digits for logging
-    float_fmt = ".3f"
-    pd.options.display.float_format = ('{:,' + float_fmt + '}').format
-    runs_path = config.runs_path
-    experiment_root = os.path.join(runs_path, str(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')))
-    os.makedirs(experiment_root, exist_ok=True)
+    print("WARNING: Using hardcoded global mean and std. Depends on feature settings!") # Keep warning for now
 
-    # for all folds
-    scores = {}
-    # expensive!
-    #global_stats = get_global_stats(data_path)
-    # for spectrograms
-    print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
-    for test_fold in config.test_folds:
-        # Initialize a new wandb run
-        now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        run = wandb.init(project="challenge2", name=f"{args.model_type}-{now}-{args.comment}-{test_fold}")
-        experiment = os.path.join(experiment_root, f'{test_fold}')
-        if not os.path.exists(experiment):
-            os.mkdir(experiment)
+    # Iterate through test folds defined in the config
+    for test_fold in cfg.data.test_folds:
+        print(f"\n===== FOLD {test_fold} =====")
 
-        # clone stdout to file (does not include stderr). If used may confuse linux 'tee' command.
-        with Tee(os.path.join(experiment, 'train.log'), 'w', 1, encoding='utf-8',
-                 newline='\n', proc_cr=True):
-            # this function assures consistent 'test_folds' setting for train, val, test splits
+        # Hydra manages output directories per run/job.
+        # For cross-validation, we might want outputs grouped by fold.
+        # One way is to let Hydra handle the main run directory, and we save fold-specific things inside.
+        # Or, structure the Hydra launch itself (e.g., using hydra-optuna-sweeper or custom launcher).
+        # For simplicity here, we'll use the Hydra CWD for each fold's run.
+        # If running folds sequentially, Hydra creates a new dir each time.
+        # If running in parallel (e.g., via sweep), Hydra handles subdirs.
+        current_run_dir = os.getcwd() # Hydra sets this
+        print(f"Output directory for fold {test_fold}: {current_run_dir}")
+
+        # Initialize WandB for the current fold
+        # Use Hydra config for naming and log the config
+        now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") # Define now_str
+        run_name = f"{cfg.model.name}-fold{test_fold}-{cfg.get('comment', '')}-{now_str}" # Use now_str
+        run = wandb.init(
+            project=cfg.get("wandb_project", "challenge2"), # Make project configurable
+            name=run_name,
+            config=OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True) # Log Hydra config
+        )
+
+        # Clone stdout/stderr to a log file in the Hydra output directory
+        log_file_path = os.path.join(current_run_dir, f'train_fold_{test_fold}.log')
+        with Tee(log_file_path, 'w', 1, encoding='utf-8', newline='\n', proc_cr=True):
+
+            # --- Data Loading ---
+            # Use absolute data path and cfg for parameters
             get_fold_dataset = partial(ESC50, root=data_path, download=True,
-                                       test_folds={test_fold}, global_mean_std=global_stats[test_fold - 1])
+                                       test_folds={test_fold}, global_mean_std=global_stats[test_fold - 1]) # Still using hardcoded stats
 
             train_set = get_fold_dataset(subset="train")
             print('*****')
-            print(f'train folds are {train_set.train_folds} and test fold is {train_set.test_folds}')
-            print('random wave cropping')
+            print(f'Train folds: {train_set.train_folds}, Test fold: {train_set.test_folds}')
+            # print('random wave cropping') # Assuming this happens inside ESC50 dataset
 
             train_loader = torch.utils.data.DataLoader(train_set,
-                                                       batch_size=config.batch_size,
+                                                       batch_size=cfg.training.batch_size, # Use cfg
                                                        shuffle=True,
-                                                       num_workers=config.num_workers,
+                                                       num_workers=cfg.training.num_workers, # Use cfg
                                                        drop_last=False,
-                                                       persistent_workers=config.persistent_workers,
+                                                       persistent_workers=cfg.training.persistent_workers, # Use cfg
                                                        pin_memory=True,
                                                        )
 
             val_loader = torch.utils.data.DataLoader(get_fold_dataset(subset="val"),
-                                                     batch_size=config.batch_size,
+                                                     batch_size=cfg.training.batch_size, # Use cfg
                                                      shuffle=False,
-                                                     num_workers=config.num_workers,
+                                                     num_workers=cfg.training.num_workers, # Use cfg
                                                      drop_last=False,
-                                                     persistent_workers=config.persistent_workers,
+                                                     persistent_workers=cfg.training.persistent_workers, # Use cfg
                                                      )
 
+            # --- Model, Loss, Optimizer, Scheduler ---
             print()
-            # instantiate model
-            model = make_model(args.model_type, config.n_mels, n_classes)
-            # model = nn.DataParallel(model, device_ids=config.device_ids)
-            model = model.to(device)
+            model = make_model(cfg).to(device) # Use cfg
+            print(f"Model: {cfg.model.name}")
+            print(f"Number of parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
             print('*****')
 
-            # Define a loss function and optimizer
             criterion = nn.CrossEntropyLoss().to(device)
 
-            if config.optimizer == 'Adam':
+            # Optimizer
+            if cfg.training.optimizer == 'Adam':
                 optimizer = torch.optim.Adam(model.parameters(),
-                                             lr=config.lr,
-                                             weight_decay=config.weight_decay)
-            elif config.optimizer == 'SGD':
-                optimizer = torch.optim.SGD(model.parameters(),
-                                            lr=config.lr,
-                                            momentum=0.9,
-                                            weight_decay=config.weight_decay)
+                                             lr=cfg.training.lr, # Use cfg
+                                             weight_decay=cfg.training.weight_decay) # Use cfg
+            elif cfg.training.optimizer == 'SGD':
+                 optimizer = torch.optim.SGD(model.parameters(),
+                                             lr=cfg.training.lr, # Use cfg
+                                             momentum=0.9, # Consider adding momentum to config if needed
+                                             weight_decay=cfg.training.weight_decay) # Use cfg
+            else:
+                raise ValueError(f"Unsupported optimizer: {cfg.training.optimizer}")
 
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
-                                                        step_size=config.step_size,
-                                                        gamma=config.gamma)
-            scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            optimizer,
-            max_lr=1.5e-3,  # Peak LR 
-            total_steps=config.epochs,# * len(train_loader),  # Total training steps
-            pct_start=0.1,  # Warmup phase (10% of steps)
-)
+            # Scheduler (Example: adapting OneCycleLR)
+            # Ensure scheduler config matches the type used
+            if cfg.training.scheduler.type == 'OneCycleLR':
+                 scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                     optimizer,
+                     max_lr=cfg.training.scheduler.max_lr, # Add max_lr to config if using OneCycleLR
+                     total_steps=cfg.training.epochs, # Simplified total_steps, adjust if needed
+                     pct_start=cfg.training.scheduler.pct_start, # Add pct_start to config
+                 )
+            elif cfg.training.scheduler.type == 'StepLR':
+                 scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
+                                                             step_size=cfg.training.scheduler.step_size, # Use cfg
+                                                             gamma=cfg.training.scheduler.gamma) # Use cfg
+            else:
+                 # Add other schedulers or a default/None option
+                 raise ValueError(f"Unsupported scheduler type: {cfg.training.scheduler.type}")
 
-            # fit the model using only training and validation data, no testing data allowed here
-            print()
-            print(f"Number of parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
-            fit_classifier()
 
-            # tests
+            # --- Training ---
+            print("\n--- Starting Training ---")
+            # Pass all required arguments to fit_classifier
+            fit_classifier(cfg, model, train_loader, val_loader, criterion, optimizer, scheduler, device, current_run_dir, float_fmt)
+            print("--- Training Finished ---")
+
+
+            # --- Testing ---
+            print("\n--- Starting Testing ---")
             test_loader = torch.utils.data.DataLoader(get_fold_dataset(subset="test"),
-                                                      batch_size=config.batch_size,
+                                                      batch_size=cfg.training.batch_size, # Use cfg (or define test batch size)
                                                       shuffle=False,
-                                                      num_workers=0,  # config.num_workers,
+                                                      num_workers=cfg.training.num_workers, # Use cfg num_workers for consistency
                                                       drop_last=False,
                                                       )
 
-            print(f'\ntest {experiment}')
-            test_acc, test_loss, _ = test(model, test_loader, criterion=criterion, device=device)
+            # Load the best model saved by EarlyStopping for testing
+            best_model_path = os.path.join(current_run_dir, 'best_val_loss.pt')
+            if os.path.exists(best_model_path):
+                 print(f"Loading best model from: {best_model_path}")
+                 model.load_state_dict(torch.load(best_model_path)) # Load best model state
+            else:
+                 print("Warning: best_val_loss.pt not found. Testing with the terminal model.")
+                 # If best model isn't found, the model variable holds the terminal state
+
+            # Pass cfg to test function
+            test_acc, test_loss, _ = test(cfg, model, test_loader, criterion=criterion, device=device)
             scores[test_fold] = pd.Series(dict(TestAcc=test_acc, TestLoss=np.mean(test_loss)))
+            print(f"Fold {test_fold} Test Results:")
             print(scores[test_fold])
-            # print(scores[test_fold].unstack())
-            print()
-    scores = pd.concat(scores).unstack([-1])
-    print(pd.concat((scores, scores.agg(['mean', 'std']))))
-    wandb.finish()
+            print("--- Testing Finished ---")
+
+            # Log final fold scores to wandb
+            wandb.log({f"final_fold_{test_fold}_test_acc": test_acc,
+                       f"final_fold_{test_fold}_test_loss": np.mean(test_loss)})
+
+        # Finish WandB run for the current fold
+        run.finish()
+
+    # --- Aggregate Results ---
+    print("\n===== CROSS-VALIDATION RESULTS =====")
+    scores_df = pd.concat(scores, axis=1).T # Transpose to have folds as rows
+    # scores_df = pd.concat(scores).unstack([-1]) # Original way
+    agg_scores = scores_df.agg(['mean', 'std'])
+    final_scores_df = pd.concat([scores_df, agg_scores])
+    print(final_scores_df)
+
+    # Save aggregated scores to a file in the original working directory or a specific results dir
+    # Note: Hydra's multirun directory might be a better place if running a sweep.
+    # For a simple sequential run, saving outside the fold-specific Hydra dirs might be desired.
+    try:
+        # Save in the directory where the script was launched
+        original_cwd = hyu.get_original_cwd()
+        scores_path = os.path.join(original_cwd, 'crossval_scores.csv')
+        final_scores_df.to_csv(scores_path)
+        print(f"Saved cross-validation scores to: {scores_path}")
+        # Log aggregated scores to a final summary (optional, needs separate wandb run or different handling)
+        # wandb.log({"mean_test_acc": agg_scores.loc['mean', 'TestAcc'], ...})
+    except Exception as e:
+        print(f"Error saving final scores: {e}")
+
+
+if __name__ == "__main__":
+    # The @hydra.main decorator handles execution.
+    # Any code here will run *before* Hydra takes over if not careful.
+    # It's generally best to put all logic inside the decorated function.
+    main()
