@@ -1,9 +1,9 @@
 # Repo/conf/config.yaml
 defaults:
-  - data: esc50      # Default dataset configuration
-  - model: default     # Default model configuration
-  - training: default  # Default training parameters
-  - testing: default   # Default testing parameters
+  - data/esc50      # Explicitly specify group/name
+  - model/default   # Explicitly specify group/name
+  - training/default # Explicitly specify group/name
+  - testing/default  # Explicitly specify group/name
   - _self_           # Allows overriding defaults from this file or command line
 
 # General paths or settings
