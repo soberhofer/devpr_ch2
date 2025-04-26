@@ -99,6 +99,7 @@ def train_epoch(cfg: DictConfig, model, train_loader, criterion, optimizer, devi
 
 
 # Added cfg, model, train_loader, val_loader, criterion, optimizer, scheduler, device, experiment_dir, float_fmt parameters
+# Note: 'run' object is not passed here, we check cfg directly
 def fit_classifier(cfg: DictConfig, model, train_loader, val_loader, criterion, optimizer, scheduler, device, experiment_dir, float_fmt):
     num_epochs = cfg.training.epochs # Use cfg
 
@@ -134,13 +135,15 @@ def fit_classifier(cfg: DictConfig, model, train_loader, val_loader, criterion, 
             f"ValLoss={val_loss_avg:{float_fmt}}",
             end=' ')
 
-        wandb.log({
-            "LearningRate": lr[0],
-            "ValLoss": val_loss_avg,
-            "ValAcc": val_acc,
-            "TrnLoss": np.mean(train_loss),
-            "TrnAcc": train_acc,
-        })
+        # Log to wandb if enabled
+        if cfg.use_wandb:
+            wandb.log({
+                "LearningRate": lr[0],
+                "ValLoss": val_loss_avg,
+                "ValAcc": val_acc,
+                "TrnLoss": np.mean(train_loss),
+                "TrnAcc": train_acc,
+            })
 
         early_stop, improved = loss_stopping(val_loss_avg, model, epoch)
         if not improved:
@@ -238,15 +241,16 @@ def main(cfg: DictConfig):
         current_run_dir = os.getcwd() # Hydra sets this
         print(f"Output directory for fold {test_fold}: {current_run_dir}")
 
-        # Initialize WandB for the current fold
-        # Use Hydra config for naming and log the config
-        now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") # Define now_str
-        run_name = f"{cfg.model.name}-fold{test_fold}-{cfg.get('comment', '')}-{now_str}" # Use now_str
-        run = wandb.init(
-            project=cfg.get("wandb_project", "challenge2"), # Make project configurable
-            name=run_name,
-            config=OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True) # Log Hydra config
-        )
+        # Initialize WandB for the current fold if enabled
+        run = None # Initialize run to None
+        if cfg.use_wandb:
+            now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") # Define now_str
+            run_name = f"{cfg.model.name}-fold{test_fold}-{cfg.get('comment', '')}-{now_str}" # Use now_str
+            run = wandb.init(
+                project=cfg.get("wandb_project", "challenge2"), # Make project configurable
+                name=run_name,
+                config=OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True) # Log Hydra config
+            )
 
         # Clone stdout/stderr to a log file in the Hydra output directory
         log_file_path = os.path.join(current_run_dir, f'train_fold_{test_fold}.log')
@@ -360,12 +364,14 @@ def main(cfg: DictConfig):
             print(scores[test_fold])
             print("--- Testing Finished ---")
 
-            # Log final fold scores to wandb
-            wandb.log({f"final_fold_{test_fold}_test_acc": test_acc,
-                       f"final_fold_{test_fold}_test_loss": np.mean(test_loss)})
+            # Log final fold scores to wandb if enabled
+            if run: # Check if run was initialized
+                wandb.log({f"final_fold_{test_fold}_test_acc": test_acc,
+                           f"final_fold_{test_fold}_test_loss": np.mean(test_loss)})
 
-        # Finish WandB run for the current fold
-        run.finish()
+        # Finish WandB run for the current fold if enabled
+        if run: # Check if run was initialized
+            run.finish()
 
     # --- Aggregate Results ---
     print("\n===== CROSS-VALIDATION RESULTS =====")

@@ -6,6 +6,11 @@ defaults:
   - testing/default  # Explicitly specify group/name
   - _self_           # Allows overriding defaults from this file or command line
 
+# WandB configuration
+use_wandb: false      # Set to true to enable WandB logging
+wandb_project: "challenge2" # Default WandB project name (can be overridden)
+comment: ""           # Optional comment to append to run name
+
 # General paths or settings
 runs_path: 'results' # Base directory for saving experiment results
 
