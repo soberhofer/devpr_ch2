@@ -20,6 +20,7 @@ import hydra.utils as hyu # Use hyu for hydra utils
 
 from models.model_classifier import AudioMLP, AudioCNN, TFCNN, TFCNN2
 from models.tfcnn import TFNet, Cnn
+from models.mobilenet import MobileNetV2Audio # Import the new model
 from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
 # import config # Removed old config import
@@ -188,6 +189,11 @@ def make_model(cfg: DictConfig):
     elif model_type == 'tfnet_cnn':
         # Assuming Cnn takes classes_num, adjust if needed
         model = Cnn(classes_num=params.output_size)
+    elif model_type == 'mobilenetv2':
+        # Instantiate MobileNetV2Audio using parameters from config
+        model = MobileNetV2Audio(num_classes=params.output_size,
+                                 pretrained=params.get('pretrained', True), # Default to pretrained=True if not specified
+                                 input_channels=params.get('input_channels', 1)) # Default to 1 input channel
     else:
         raise ValueError(f"Invalid model type in config: {model_type}")
     return model
