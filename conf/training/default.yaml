@@ -41,6 +41,12 @@ scheduler:
   # --- Warmup (Optional, needs implementation in training script if used) ---
   warm_epochs: 10 # Parameter for potential warmup phase (currently not implemented in train_crossval.py)
 
+  # --- OneCycleLR specific ---
+  See: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
+  max_lr: 0.1        # For OneCycleLR: Upper learning rate boundary in the cycle.
+  pct_start: 0.3     # For OneCycleLR: Percentage of the cycle spent increasing the learning rate.
+
+
 # Hardware and display
 device_id: 0
 disable_bat_pbar: true # Progress bar display
