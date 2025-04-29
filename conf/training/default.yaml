@@ -31,7 +31,7 @@ scheduler:
   # See: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.CyclicLR.html
   base_lr: 1e-4       # For CyclicLR: Initial learning rate which is the lower boundary in the cycle.
   max_lr: 1e-3        # For CyclicLR: Upper learning rate boundary, which is scaled relative to base_lr.
-  step_size_up: 2000  # For CyclicLR: Number of training iterations in the increasing half of a cycle.
+  step_size_up: 50  # For CyclicLR: Number of training iterations in the increasing half of a cycle.
   # mode: "triangular" # Optional: "triangular", "triangular2", "exp_range". Default: "triangular"
   # gamma: 1.0         # Optional: Constant in 'exp_range' scaling function. Default: 1.0
   # cycle_momentum: True # Optional: If True, momentum is cycled inversely to learning rate between 'base_momentum' and 'max_momentum'. Default: True
