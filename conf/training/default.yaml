@@ -19,11 +19,27 @@ weight_decay: 1e-3
 
 # Scheduler settings
 scheduler:
-  type: StepLR # Assuming StepLR based on gamma/step_size, adjust if different
-  step_size: 5
-  gamma: 0.8
-  warm_epochs: 10 # Parameter for potential warmup phase
+  # --- Common ---
+  type: StepLR # Options: StepLR, CyclicLR
   verbose: true
+
+  # --- StepLR specific ---
+  step_size: 5 # For StepLR: Period of learning rate decay.
+  gamma: 0.8   # For StepLR: Multiplicative factor of learning rate decay.
+
+  # --- CyclicLR specific ---
+  # See: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.CyclicLR.html
+  base_lr: 1e-4       # For CyclicLR: Initial learning rate which is the lower boundary in the cycle.
+  max_lr: 1e-3        # For CyclicLR: Upper learning rate boundary, which is scaled relative to base_lr.
+  step_size_up: 2000  # For CyclicLR: Number of training iterations in the increasing half of a cycle.
+  # mode: "triangular" # Optional: "triangular", "triangular2", "exp_range". Default: "triangular"
+  # gamma: 1.0         # Optional: Constant in 'exp_range' scaling function. Default: 1.0
+  # cycle_momentum: True # Optional: If True, momentum is cycled inversely to learning rate between 'base_momentum' and 'max_momentum'. Default: True
+  # base_momentum: 0.8   # Optional: Lower momentum boundary. Default: 0.8
+  # max_momentum: 0.9    # Optional: Upper momentum boundary. Default: 0.9
+
+  # --- Warmup (Optional, needs implementation in training script if used) ---
+  warm_epochs: 10 # Parameter for potential warmup phase (currently not implemented in train_crossval.py)
 
 # Hardware and display
 device_id: 0
