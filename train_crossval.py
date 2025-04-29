@@ -193,8 +193,8 @@ def make_model(cfg: DictConfig):
         # Instantiate MobileNetV2Audio using parameters from config
         model = MobileNetV2Audio(num_classes=params.output_size,
                                  pretrained=params.get('pretrained', True), # Default to pretrained=True if not specified
-                                 input_channels=params.get('input_channels', 1),
-                                 dropout_prob=params.dropout) # Default to 1 input channel
+                                 input_channels=params.get('input_channels', 1), # Default to 1 input channel
+                                 dropout_prob=params.get('dropout_prob', 0.5)) # Use get with default, access correct key
     else:
         raise ValueError(f"Invalid model type in config: {model_type}")
     return model
