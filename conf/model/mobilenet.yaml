@@ -14,5 +14,5 @@ params:
   # Adjust if your data preprocessing creates multi-channel input
   input_channels: 1
 
-  # dropout rate for the model
-  dropout: 0.5
+  # dropout rate for the model (parameter name in model code is dropout_prob)
+  dropout_prob: 0.5
