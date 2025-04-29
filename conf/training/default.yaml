@@ -10,7 +10,7 @@ persistent_workers: true # Was false in original comments
 # Training loop
 epochs: 100
 patience: 20 # Early stopping patience
-label_smoothing: 0.0 # Label smoothing factor for CrossEntropyLoss (0.0 = disabled)
+label_smoothing: 0.1 # Label smoothing factor for CrossEntropyLoss (0.0 = disabled)
 
 # Optimizer settings
 optimizer: Adam
