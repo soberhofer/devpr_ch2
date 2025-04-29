@@ -112,8 +112,8 @@ class ESC50(data.Dataset):
                 #transforms.RandomScale(max_scale=1.25),
                 transforms.RandomPadding(out_len=out_len),
                 transforms.RandomCrop(out_len=out_len),
-                #transforms.TimeMask(max_width=3, numbers=2),
-                #transforms.FrequencyMask(max_width=3, numbers=2),
+                transforms.TimeMask(max_width=3, numbers=2),
+                transforms.FrequencyMask(max_width=3, numbers=2),
             )
 
             self.spec_transforms = transforms.Compose(
