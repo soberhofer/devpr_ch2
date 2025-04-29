@@ -43,7 +43,6 @@ scheduler:
 
   # --- OneCycleLR specific ---
   See: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
-  max_lr: 0.1        # For OneCycleLR: Upper learning rate boundary in the cycle.
   pct_start: 0.3     # For OneCycleLR: Percentage of the cycle spent increasing the learning rate.
 
 
