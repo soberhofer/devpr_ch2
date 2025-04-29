@@ -13,3 +13,6 @@ params:
   # Number of input channels for the spectrogram (default: 1 in the model code)
   # Adjust if your data preprocessing creates multi-channel input
   input_channels: 1
+
+  # dropout rate for the model
+  dropout: 0.2
