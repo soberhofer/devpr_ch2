@@ -1,6 +1,6 @@
 outputs
 results
-data
+/data
 .DS_Store
 *.pyc
 wandb

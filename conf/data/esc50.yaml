@@ -1,0 +1,15 @@
+# Repo/conf/data/esc50.yaml
+# Configuration specific to the ESC-50 dataset
+
+name: esc50
+path: 'data/esc50' # Path to the dataset directory
+
+# Audio processing parameters
+sr: 44100
+n_mels: 128
+hop_length: 512
+
+# Dataset properties
+n_classes: 50
+folds: 5
+test_folds: [1, 2, 3, 4, 5] # Folds used for testing
