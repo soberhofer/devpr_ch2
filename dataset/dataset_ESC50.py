@@ -155,7 +155,7 @@ class ESC50(data.Dataset):
         # identifying the label of the sample from its name
         temp = file_name.split('.')[0]
         class_id = int(temp.split('-')[-1])
-        if not index in self.cache_dict:
+        if not index in self.cache_dict or index in self.cache_dict:
             # Use self.sr
             wave, rate = librosa.load(path, sr=self.sr)
             if wave.ndim == 1:
