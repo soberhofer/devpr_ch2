@@ -113,8 +113,7 @@ class ESC50(data.Dataset):
                 transforms.RandomPadding(out_len=out_len),
                 transforms.RandomCrop(out_len=out_len),
                 transforms.RandomNoise(min_noise=0.0, max_noise=0.1),
-                transforms.TimeMask(max_width=3, numbers=2),
-                transforms.FrequencyMask(max_width=3, numbers=2),
+                # Removed TimeMask and FrequencyMask from here
             )
 
             self.spec_transforms = transforms.Compose(
@@ -123,6 +122,9 @@ class ESC50(data.Dataset):
                 # lambda non-pickleable, problem on windows, replace with partial function
                 torch.Tensor,
                 partial(torch.unsqueeze, dim=0),
+                # Add TimeMask and FrequencyMask here, applied to the spectrogram
+                transforms.TimeMask(max_width=3, numbers=2),
+                transforms.FrequencyMask(max_width=3, numbers=2),
             )
 
         else:
