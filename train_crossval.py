@@ -305,7 +305,8 @@ def main(cfg: DictConfig):
             print(f"Number of parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
             print('*****')
 
-            criterion = nn.CrossEntropyLoss().to(device)
+            criterion = nn.CrossEntropyLoss(label_smoothing=cfg.training.label_smoothing).to(device)
+            print(f"Using label smoothing: {cfg.training.label_smoothing}") # Add log message
 
             # Optimizer
             if cfg.training.optimizer == 'Adam':

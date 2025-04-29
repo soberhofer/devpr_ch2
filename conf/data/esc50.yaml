@@ -2,7 +2,7 @@
 # Configuration specific to the ESC-50 dataset
 
 name: esc50
-path: 'data/esc50' # Path to the dataset directory
+path: '../data/esc50' # Path to the dataset directory
 
 # Audio processing parameters
 sr: 44100

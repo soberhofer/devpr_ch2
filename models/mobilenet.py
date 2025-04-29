@@ -48,7 +48,7 @@ class MobileNetV2Audio(nn.Module):
         # Modify the final classifier layer
         # Original classifier: Linear(in_features=1280, out_features=1000, bias=True)
         # Add dropout layer
-        self.mobilenet.classifier[0] = nn.Dropout(p=dropout_prob)  # You can adjust the dropout probability
+        self.mobilenet.classifier[0] = nn.Dropout(p=dropout_prob)
         num_ftrs = self.mobilenet.classifier[1].in_features
         self.mobilenet.classifier[1] = nn.Linear(num_ftrs, self.num_classes)
 
