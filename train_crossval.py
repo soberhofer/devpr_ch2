@@ -329,39 +329,44 @@ def main(cfg: DictConfig):
             # Scheduler (Example: adapting OneCycleLR)
             # Ensure scheduler config matches the type used
             if cfg.training.scheduler.type == 'OneCycleLR':
-                 scheduler = torch.optim.lr_scheduler.OneCycleLR(
-                     optimizer,
-                     max_lr=cfg.training.scheduler.max_lr, # Add max_lr to config if using OneCycleLR
-                     total_steps=cfg.training.epochs, # Simplified total_steps, adjust if needed
-                     pct_start=cfg.training.scheduler.pct_start, # Add pct_start to config
-                 )
+                # Calculate total steps correctly: epochs * steps_per_epoch
+                steps_per_epoch = len(train_loader)
+                total_steps = cfg.training.epochs * steps_per_epoch
+                print(f"Scheduler: OneCycleLR, Total Steps: {total_steps}") # Add log
+                scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                    optimizer,
+                    max_lr=cfg.training.scheduler.max_lr, # Add max_lr to config if using OneCycleLR
+                    total_steps=total_steps, # Corrected total_steps
+                    pct_start=cfg.training.scheduler.pct_start, # Add pct_start to config
+                    # anneal_strategy='cos', # Consider adding anneal_strategy if needed
+                )
             elif cfg.training.scheduler.type == 'StepLR':
-                 scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
-                                                             step_size=cfg.training.scheduler.step_size, # Use cfg
-                                                             gamma=cfg.training.scheduler.gamma, # Use cfg
-                                                             verbose=cfg.training.scheduler.get('verbose', False)) # Add verbose
+                scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
+                                                            step_size=cfg.training.scheduler.step_size, # Use cfg
+                                                            gamma=cfg.training.scheduler.gamma, # Use cfg
+                                                            verbose=cfg.training.scheduler.get('verbose', False)) # Add verbose
             elif cfg.training.scheduler.type == 'CyclicLR':
-                 # Ensure required parameters exist in the config
-                 required_cyclic_params = ['base_lr', 'max_lr', 'step_size_up']
-                 if not all(hasattr(cfg.training.scheduler, p) for p in required_cyclic_params):
-                     raise ValueError(f"Missing required parameters for CyclicLR: {required_cyclic_params}")
+                # Ensure required parameters exist in the config
+                required_cyclic_params = ['base_lr', 'max_lr', 'step_size_up']
+                if not all(hasattr(cfg.training.scheduler, p) for p in required_cyclic_params):
+                    raise ValueError(f"Missing required parameters for CyclicLR: {required_cyclic_params}")
 
-                 scheduler = torch.optim.lr_scheduler.CyclicLR(
-                     optimizer,
-                     base_lr=cfg.training.scheduler.base_lr,
-                     max_lr=cfg.training.scheduler.max_lr,
-                     step_size_up=cfg.training.scheduler.step_size_up,
-                     # Optional parameters from config, using .get() for safety
-                     mode=cfg.training.scheduler.get('mode', 'triangular'),
-                     gamma=cfg.training.scheduler.get('gamma', 1.0),
-                     cycle_momentum=cfg.training.scheduler.get('cycle_momentum', True),
-                     base_momentum=cfg.training.scheduler.get('base_momentum', 0.8),
-                     max_momentum=cfg.training.scheduler.get('max_momentum', 0.9),
-                     verbose=cfg.training.scheduler.get('verbose', False) # Add verbose
-                 )
+                scheduler = torch.optim.lr_scheduler.CyclicLR(
+                    optimizer,
+                    base_lr=cfg.training.scheduler.base_lr,
+                    max_lr=cfg.training.scheduler.max_lr,
+                    step_size_up=cfg.training.scheduler.step_size_up,
+                    # Optional parameters from config, using .get() for safety
+                    mode=cfg.training.scheduler.get('mode', 'triangular'),
+                    gamma=cfg.training.scheduler.get('gamma', 1.0),
+                    cycle_momentum=cfg.training.scheduler.get('cycle_momentum', True),
+                    base_momentum=cfg.training.scheduler.get('base_momentum', 0.8),
+                    max_momentum=cfg.training.scheduler.get('max_momentum', 0.9),
+                    verbose=cfg.training.scheduler.get('verbose', False) # Add verbose
+                )
             else:
-                 # Add other schedulers or a default/None option
-                 raise ValueError(f"Unsupported scheduler type: {cfg.training.scheduler.type}")
+                # Add other schedulers or a default/None option
+                raise ValueError(f"Unsupported scheduler type: {cfg.training.scheduler.type}")
 
 
             # --- Training ---
