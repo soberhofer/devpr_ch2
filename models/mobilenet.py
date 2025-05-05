@@ -75,20 +75,23 @@ class Conv2dNormActivation(nn.Sequential):
         super().__init__(*layers)
         self.out_channels = out_channels
 
-# Squeeze-and-Excitation layer implementation (simplified)
+# Squeeze-and-Excitation layer implementation (corrected)
 class SElayer(nn.Module):
-    def __init__(self, inp, oup, reduction=4, scale_activation=nn.Hardsigmoid):
+    # Corrected signature: takes the number of channels it operates on
+    def __init__(self, channels: int, reduction: int = 4, scale_activation: Callable[..., nn.Module] = nn.Hardsigmoid):
         super().__init__()
+        # Calculate squeeze channels internally
+        squeeze_channels = _make_divisible(channels // reduction, 8)
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
-            nn.Linear(oup, _make_divisible(inp // reduction, 8)),
+            nn.Linear(channels, squeeze_channels), # Input features = channels
             nn.ReLU(inplace=True),
-            nn.Linear(_make_divisible(inp // reduction, 8), oup),
-            scale_activation() if scale_activation else nn.Identity() # Use provided activation or Identity
+            nn.Linear(squeeze_channels, channels), # Output features = channels
+            scale_activation() if scale_activation else nn.Identity()
         )
 
-    def forward(self, x):
-        b, c, _, _ = x.size()
+    def forward(self, x: Tensor) -> Tensor:
+        b, c, _, _ = x.size() # c = input channels
         y = self.avg_pool(x).view(b, c)
         y = self.fc(y).view(b, c, 1, 1)
         return x * y
@@ -166,10 +169,8 @@ class InvertedResidual(nn.Module):
             )
         )
         if cnf.use_se:
-            # The original SE Layer definition might need adjustment based on project structure
-            # Using the simplified SElayer defined above
-            squeeze_channels = _make_divisible(cnf.expanded_channels // 4, 8)
-            layers.append(se_layer(cnf.expanded_channels, squeeze_channels)) # Adjusted to match simplified SElayer signature
+            # Pass only the number of channels the SE layer operates on (expanded_channels)
+            layers.append(se_layer(cnf.expanded_channels)) # Corrected instantiation
 
         # project
         layers.append(
