@@ -343,7 +343,7 @@ def main(cfg: DictConfig):
                 scheduler = torch.optim.lr_scheduler.OneCycleLR(
                     optimizer,
                     max_lr=cfg.training.scheduler.max_lr, # Add max_lr to config if using OneCycleLR
-                    total_steps=total_steps, # Corrected total_steps
+                    total_steps=steps_per_epoch, # Corrected total_steps
                     pct_start=cfg.training.scheduler.pct_start, # Add pct_start to config
                     # anneal_strategy='cos', # Consider adding anneal_strategy if needed
                 )
