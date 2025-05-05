@@ -1,18 +1,17 @@
 # Repo/conf/model/mobilenet.yaml
-# Configuration for the MobileNetV2Audio model
+# Configuration for the MobileNetV3 model
 
-name: mobilenetv2
+name: mobilenet_v3_large # Changed from mobilenetv2, defaulting to large
 
 params:
   # output_size will be interpolated from the data config (e.g., data.n_classes)
   output_size: ${data.n_classes}
 
-  # Whether to use ImageNet pretrained weights (defaulting to false here)
-  pretrained: false
+  # pretrained parameter removed as it's not used in the new implementation
 
   # Number of input channels for the spectrogram (default: 1 in the model code)
   # Adjust if your data preprocessing creates multi-channel input
   input_channels: 1
 
-  # dropout rate for the model (parameter name in model code is dropout_prob)
-  dropout_prob: 0.5
+  # dropout rate for the model (parameter name in model code is dropout)
+  dropout: 0.5 # Renamed from dropout_prob

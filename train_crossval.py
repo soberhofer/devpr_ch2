@@ -20,7 +20,7 @@ import hydra.utils as hyu # Use hyu for hydra utils
 
 from models.model_classifier import AudioMLP, AudioCNN, TFCNN, TFCNN2
 from models.tfcnn import TFNet, Cnn
-from models.mobilenet import MobileNetV2Audio # Import the new model
+from models.mobilenet import mobilenet_v3_large, mobilenet_v3_small # Import the new models
 from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
 # import config # Removed old config import
@@ -189,12 +189,16 @@ def make_model(cfg: DictConfig):
     elif model_type == 'tfnet_cnn':
         # Assuming Cnn takes classes_num, adjust if needed
         model = Cnn(classes_num=params.output_size)
-    elif model_type == 'mobilenetv2':
-        # Instantiate MobileNetV2Audio using parameters from config
-        model = MobileNetV2Audio(num_classes=params.output_size,
-                                 pretrained=params.get('pretrained', True), # Default to pretrained=True if not specified
-                                 input_channels=params.get('input_channels', 1), # Default to 1 input channel
-                                 dropout_prob=params.get('dropout_prob', 0.5)) # Use get with default, access correct key
+    elif model_type == 'mobilenet_v3_large':
+        # Instantiate MobileNetV3 Large using parameters from config
+        model = mobilenet_v3_large(num_classes=params.output_size,
+                                   input_channels=params.get('input_channels', 1), # Default to 1 input channel
+                                   dropout=params.get('dropout', 0.2)) # Use dropout from config, default 0.2
+    elif model_type == 'mobilenet_v3_small':
+        # Instantiate MobileNetV3 Small using parameters from config
+        model = mobilenet_v3_small(num_classes=params.output_size,
+                                   input_channels=params.get('input_channels', 1), # Default to 1 input channel
+                                   dropout=params.get('dropout', 0.2)) # Use dropout from config, default 0.2
     else:
         raise ValueError(f"Invalid model type in config: {model_type}")
     return model
