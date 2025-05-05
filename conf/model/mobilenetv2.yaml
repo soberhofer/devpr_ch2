@@ -1,0 +1,17 @@
+# Repo/conf/model/mobilenetv2.yaml
+# Configuration for the MobileNetV2Audio model
+
+name: mobilenetv2
+
+params:
+  # output_size will be interpolated from the data config (e.g., data.n_classes)
+  output_size: ${data.n_classes}
+
+  # Whether to use ImageNet pretrained weights
+  pretrained: false
+
+  # Number of input channels for the spectrogram (default: 1 in the model code)
+  input_channels: 1
+
+  # dropout rate for the model (parameter name in model code is dropout_prob)
+  dropout_prob: 0.5

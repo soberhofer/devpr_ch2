@@ -20,7 +20,8 @@ import hydra.utils as hyu # Use hyu for hydra utils
 
 from models.model_classifier import AudioMLP, AudioCNN, TFCNN, TFCNN2
 from models.tfcnn import TFNet, Cnn
-from models.mobilenet import mobilenet_v3_large, mobilenet_v3_small # Import the new models
+from models.mobilenet import mobilenet_v3_large, mobilenet_v3_small # Keep V3 imports
+from models.mobilenetv2 import MobileNetV2Audio # Import V2 from its new file
 from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
 # import config # Removed old config import
@@ -189,6 +190,12 @@ def make_model(cfg: DictConfig):
     elif model_type == 'tfnet_cnn':
         # Assuming Cnn takes classes_num, adjust if needed
         model = Cnn(classes_num=params.output_size)
+    elif model_type == 'mobilenetv2':
+        # Instantiate MobileNetV2Audio using parameters from config
+        model = MobileNetV2Audio(num_classes=params.output_size,
+                                 pretrained=params.get('pretrained', False), # Use V2 config params
+                                 input_channels=params.get('input_channels', 1),
+                                 dropout_prob=params.get('dropout_prob', 0.5)) # Use V2 config params
     elif model_type == 'mobilenet_v3_large':
         # Instantiate MobileNetV3 Large using parameters from config
         model = mobilenet_v3_large(num_classes=params.output_size,
