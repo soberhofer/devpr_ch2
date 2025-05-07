@@ -20,7 +20,7 @@ weight_decay: 1e-3
 # Scheduler settings
 scheduler:
   # --- Common ---
-  type: StepLR # Options: StepLR, CyclicLR
+  type: StepLR # Options: StepLR, CyclicLR, OneCycleLR, CosineAnnealingLR
   verbose: true
 
   # --- StepLR specific ---
@@ -42,8 +42,13 @@ scheduler:
   warm_epochs: 10 # Parameter for potential warmup phase (currently not implemented in train_crossval.py)
 
   # --- OneCycleLR specific ---
-  See: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
+  # See: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
   pct_start: 0.3     # For OneCycleLR: Percentage of the cycle spent increasing the learning rate.
+
+  # --- CosineAnnealingLR specific ---
+  # See: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.CosineAnnealingLR.html
+  T_max: 100      # For CosineAnnealingLR: Maximum number of iterations. (Often set to total training iterations)
+  eta_min: 0      # For CosineAnnealingLR: Minimum learning rate. Default: 0.
 
 
 # Hardware and display

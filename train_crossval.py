@@ -369,11 +369,22 @@ def main(cfg: DictConfig):
                     cycle_momentum=cfg.training.scheduler.get('cycle_momentum', True),
                     base_momentum=cfg.training.scheduler.get('base_momentum', 0.8),
                     max_momentum=cfg.training.scheduler.get('max_momentum', 0.9),
-                    verbose=cfg.training.scheduler.get('verbose', False) # Add verbose
+                     verbose=cfg.training.scheduler.get('verbose', False) # Add verbose
+                 )
+            elif cfg.training.scheduler.type == 'CosineAnnealingLR':
+                # Calculate T_max as total training iterations
+                steps_per_epoch = len(train_loader)
+                T_max = cfg.training.epochs * steps_per_epoch
+                print(f"Scheduler: CosineAnnealingLR, T_max: {T_max}, eta_min: {cfg.training.scheduler.eta_min}") # Add log
+                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                    optimizer,
+                    T_max=T_max, # Maximum number of iterations.
+                    eta_min=cfg.training.scheduler.eta_min, # Minimum learning rate.
+                    verbose=cfg.training.scheduler.get('verbose', False)
                 )
             else:
-                # Add other schedulers or a default/None option
-                raise ValueError(f"Unsupported scheduler type: {cfg.training.scheduler.type}")
+                 # Add other schedulers or a default/None option
+                 raise ValueError(f"Unsupported scheduler type: {cfg.training.scheduler.type}")
 
 
             # --- Training ---
