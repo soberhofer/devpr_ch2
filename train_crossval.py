@@ -378,7 +378,7 @@ def main(cfg: DictConfig):
                 print(f"Scheduler: CosineAnnealingLR, T_max: {T_max}, eta_min: {cfg.training.scheduler.eta_min}") # Add log
                 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                     optimizer,
-                    T_max=T_max, # Maximum number of iterations.
+                    T_max=cfg.training.epochs, # Maximum number of iterations.
                     eta_min=cfg.training.scheduler.eta_min, # Minimum learning rate.
                     verbose=cfg.training.scheduler.get('verbose', False)
                 )
