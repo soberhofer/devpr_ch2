@@ -14,4 +14,4 @@ params:
   input_channels: 1
 
   # dropout rate for the model (parameter name in model code is dropout)
-  dropout: 0.2 # Renamed from dropout_prob, reduced from 0.5
+  dropout_prob: 0.2 # Renamed from dropout_prob, reduced from 0.5

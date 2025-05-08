@@ -200,12 +200,12 @@ def make_model(cfg: DictConfig):
         # Instantiate MobileNetV3 Large using parameters from config
         model = mobilenet_v3_large(num_classes=params.output_size,
                                    input_channels=params.get('input_channels', 1), # Default to 1 input channel
-                                   dropout=params.get('dropout', 0.2)) # Use dropout from config, default 0.2
+                                   dropout=params.get('dropout_prob', 0.2)) # Use dropout from config, default 0.2
     elif model_type == 'mobilenet_v3_small':
         # Instantiate MobileNetV3 Small using parameters from config
         model = mobilenet_v3_small(num_classes=params.output_size,
                                    input_channels=params.get('input_channels', 1), # Default to 1 input channel
-                                   dropout=params.get('dropout', 0.2)) # Use dropout from config, default 0.2
+                                   dropout=params.get('dropout_prob', 0.2)) # Use dropout from config, default 0.2
     else:
         raise ValueError(f"Invalid model type in config: {model_type}")
     return model
