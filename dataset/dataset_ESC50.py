@@ -11,6 +11,7 @@ import librosa
 
 # import config # Removed old config import
 from . import transforms
+from audiomentations import Compose as AudiomentationsCompose, AddGaussianNoise, TimeStretch, PitchShift, Gain
 
 # CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
@@ -104,38 +105,38 @@ class ESC50(data.Dataset):
         # Use self.sr and self.hop_length
         out_len = int(((self.sr * 5) // self.hop_length) * self.hop_length)
         train = self.subset == "train"
+
+        self.audiomentations_pipeline = None
         if train:
-            # augment training data with transformations that include randomness
-            # transforms can be applied on wave and spectral representation
+            # Define audiomentations pipeline for training
+            self.audiomentations_pipeline = AudiomentationsCompose([
+                Gain(min_gain_in_db=-6.0, max_gain_in_db=6.0, p=0.3),
+                TimeStretch(min_rate=0.85, max_rate=1.15, p=0.3, leave_length_unchanged=False),
+                PitchShift(min_semitones=-2, max_semitones=2, p=0.3, sr=self.sr),
+                AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.01, p=0.3),
+            ])
+
+            # Existing custom wave transforms (expect PyTorch Tensor)
+            # RandomScale (time stretch) and RandomNoise are now handled by audiomentations_pipeline
             self.wave_transforms = transforms.Compose(
-                torch.Tensor,
-                transforms.RandomScale(max_scale=1.25),
+                torch.Tensor, # Converts NumPy array (from audiomentations or loaded wave) to Tensor
                 transforms.RandomPadding(out_len=out_len),
                 transforms.RandomCrop(out_len=out_len),
-                transforms.RandomNoise(min_noise=0.0, max_noise=0.1),
-                # Removed TimeMask and FrequencyMask from here
             )
 
             self.spec_transforms = transforms.Compose(
-                # to Tensor and prepend singleton dim
-                #lambda x: torch.Tensor(x).unsqueeze(0),
-                # lambda non-pickleable, problem on windows, replace with partial function
                 torch.Tensor,
                 partial(torch.unsqueeze, dim=0),
-                # Add TimeMask and FrequencyMask here, applied to the spectrogram
                 transforms.TimeMask(max_width=3, numbers=2),
                 transforms.FrequencyMask(max_width=3, numbers=2),
             )
-
         else:
-            # for testing transforms are applied deterministically to support reproducible scores
+            # For testing, no audiomentations, custom transforms are deterministic
             self.wave_transforms = transforms.Compose(
                 torch.Tensor,
-                # disable randomness
                 transforms.RandomPadding(out_len=out_len, train=False),
                 transforms.RandomCrop(out_len=out_len, train=False)
             )
-
             self.spec_transforms = transforms.Compose(
                 torch.Tensor,
                 partial(torch.unsqueeze, dim=0),
@@ -156,68 +157,84 @@ class ESC50(data.Dataset):
         class_id = int(temp.split('-')[-1])
 
         if index in self.cache_dict:
-            # Retrieve raw_wave and ensure class_id matches
-            raw_wave, cached_class_id = self.cache_dict[index]
+            # Retrieve cached float32 wave and class_id
+            current_wave_np, cached_class_id = self.cache_dict[index]
             assert class_id == cached_class_id, f"Class ID mismatch for index {index}: file says {class_id}, cache says {cached_class_id}"
         else:
-            # Load and perform initial deterministic processing
-            wave, rate = librosa.load(path, sr=self.sr)
+            # Load with librosa (returns float32, typically in [-1, 1])
+            wave, rate = librosa.load(path, sr=self.sr, mono=False) # Load as potentially multi-channel
+
+            # Ensure wave is (channels, samples)
             if wave.ndim == 1:
-                wave = wave[:, np.newaxis]
+                wave = wave[np.newaxis, :] # Convert (N,) to (1, N)
 
-            # normalizing waves to [-1, 1]
-            if np.abs(wave.max()) > 1.0: # Check if normalization is needed
-                wave = transforms.scale(wave, wave.min(), wave.max(), -1.0, 1.0)
-            wave = wave.T * 32768.0
+            # Remove silent sections (from float32 wave)
+            if np.any(wave): # Check if any non-zero values
+                non_silent_indices = np.where(np.any(wave != 0, axis=0))[0]
+                if len(non_silent_indices) > 0:
+                    start = non_silent_indices[0]
+                    end = non_silent_indices[-1]
+                    wave = wave[:, start: end + 1]
+                else: # All channels are silent
+                    wave = np.zeros((wave.shape[0], 1), dtype=wave.dtype) # Keep C, make length 1
+            else: # Already all zeros
+                wave = np.zeros((wave.shape[0], 1), dtype=wave.dtype)
 
-            # Remove silent sections
-            if np.any(wave): # Ensure there are non-zero elements before calling min/max
-                start = wave.nonzero()[1].min()
-                end = wave.nonzero()[1].max()
-                wave = wave[:, start: end + 1]
-            # else: wave remains as loaded if completely silent or becomes empty if not handled above
+            current_wave_np = wave # This is float32, (C, N)
+            self.cache_dict[index] = (current_wave_np, class_id) # Cache the processed float32 wave
 
-            raw_wave = wave # This is the data to cache
-            self.cache_dict[index] = (raw_wave, class_id)
+        # Make a copy for stochastic augmentations
+        processed_wave_np = np.copy(current_wave_np)
 
-        # Always apply transformations to a copy of the raw_wave
-        # Ensure raw_wave is valid before copying and transforming
-        if raw_wave is None or raw_wave.size == 0:
-            # This case should ideally be handled more robustly,
-            # e.g., by returning a pre-defined zero tensor or raising a specific error.
-            # For now, we'll proceed assuming valid raw_wave or that transforms handle empty inputs gracefully.
-            # print(f"Warning: raw_wave for index {index}, file {file_name} is empty or None. Proceeding with caution.")
-            # If transforms can't handle it, this will error out.
-            # A practical solution might be to return a zero tensor of expected feature shape.
-            # For this refactoring, we assume downstream can handle or it's an edge case not primarily addressed.
-            wave_to_transform = np.array([[]], dtype=raw_wave.dtype) if raw_wave is not None else np.array([[]]) # Create empty array if None
-        else:
-            wave_to_transform = np.copy(raw_wave)
+        # Apply audiomentations if training
+        if self.subset == "train" and self.audiomentations_pipeline:
+            # audiomentations expects samples to be float32.
+            # It handles (channels, samples) or (samples,) for mono.
+            processed_wave_np = self.audiomentations_pipeline(
+                samples=processed_wave_np.astype(np.float32),
+                sample_rate=self.sr
+            )
+            # Ensure shape is still (C,N) if audiomentations changed it (e.g. mono processing by mistake)
+            if processed_wave_np.ndim == 1 and current_wave_np.shape[0] == 1: # Was mono (1,N), became (N,)
+                processed_wave_np = processed_wave_np[np.newaxis, :]
+
+        # Apply existing custom wave transforms (which expect Tensor)
+        # The first transform in self.wave_transforms is torch.Tensor
+        wave_tensor = self.wave_transforms(processed_wave_np)
+
+        # Prepare for librosa feature extraction
+        # librosa expects y as (N,) for mono, or (C,N) for multi-channel.
+        if wave_tensor.shape[0] == 1: # Mono case
+            processed_wave_for_librosa = wave_tensor.squeeze(0).numpy().astype(np.float32)
+        else: # Multi-channel case
+            processed_wave_for_librosa = wave_tensor.numpy().astype(np.float32)
         
-        wave_to_transform = self.wave_transforms(wave_to_transform) # Apply random wave augmentations
-        wave_to_transform.squeeze_(0) # Remove channel dim if mono, ensure it's safe
-
-        # Feature extraction (MFCC or Mel Spectrogram)
-        # Ensure wave_to_transform.numpy() is safe (i.e., wave_to_transform is a Tensor)
-        # The self.wave_transforms is expected to return a Tensor.
-        
-        # Convert to numpy if it's a tensor, ensure it's float for librosa
-        processed_wave_numpy = wave_to_transform.numpy().astype(np.float32)
+        # Ensure processed_wave_for_librosa is not empty before feature extraction
+        if processed_wave_for_librosa.size == 0:
+             # If augmentations resulted in an empty array, create a silent one of minimal length
+             # to prevent errors in librosa. This depends on how n_fft and hop_length are set.
+             # A single frame of silence:
+             min_len = self.hop_length 
+             if processed_wave_for_librosa.ndim == 1: # Mono
+                 processed_wave_for_librosa = np.zeros(min_len, dtype=np.float32)
+             else: # Multi-channel (should be (C,N))
+                 num_channels = current_wave_np.shape[0] # Get original number of channels
+                 processed_wave_for_librosa = np.zeros((num_channels, min_len), dtype=np.float32)
 
 
         if self.n_mfcc:
-            mfcc = librosa.feature.mfcc(y=processed_wave_numpy,
+            mfcc = librosa.feature.mfcc(y=processed_wave_for_librosa,
                                         sr=self.sr,
                                         n_mels=self.n_mels,
-                                        n_fft=1024, 
+                                        n_fft=1024,
                                         hop_length=self.hop_length,
                                         n_mfcc=self.n_mfcc)
             feat = mfcc
         else:
-            s = librosa.feature.melspectrogram(y=processed_wave_numpy,
+            s = librosa.feature.melspectrogram(y=processed_wave_for_librosa,
                                             sr=self.sr,
                                             n_mels=self.n_mels,
-                                            n_fft=1024, 
+                                            n_fft=1024,
                                             hop_length=self.hop_length,
                                             )
             log_s = librosa.power_to_db(s, ref=np.max)
