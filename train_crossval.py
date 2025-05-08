@@ -331,6 +331,10 @@ def main(cfg: DictConfig):
                 optimizer = torch.optim.Adam(model.parameters(),
                                              lr=cfg.training.lr, # Use cfg
                                              weight_decay=cfg.training.weight_decay) # Use cfg
+            elif cfg.training.optimizer == 'AdamW':
+                optimizer = torch.optim.AdamW(model.parameters(),
+                                              lr=cfg.training.lr, # Use cfg
+                                              weight_decay=cfg.training.weight_decay) # Use cfg
             elif cfg.training.optimizer == 'SGD':
                  optimizer = torch.optim.SGD(model.parameters(),
                                              lr=cfg.training.lr, # Use cfg

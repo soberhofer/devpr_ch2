@@ -13,7 +13,7 @@ patience: 20 # Early stopping patience
 label_smoothing: 0.1 # Label smoothing factor for CrossEntropyLoss (0.0 = disabled)
 
 # Optimizer settings
-optimizer: Adam
+optimizer: AdamW # Options: Adam, AdamW, SGD
 lr: 1e-3
 weight_decay: 1e-3
 
