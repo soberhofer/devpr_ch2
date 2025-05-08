@@ -209,8 +209,8 @@ def make_model(cfg: DictConfig):
                                    dropout=params.get('dropout_prob', 0.2)) # Use dropout from config, default 0.2
     elif model_type == 'ResNet50':
         # Instantiate ResNet50 using parameters from config
-        # params.num_classes and params.channels are defined in conf/model/resnet50.yaml
-        model = ResNet50(num_classes=params.num_classes,
+        # params.output_size (interpolated from data.n_classes) and params.channels are defined in conf/model/resnet50.yaml
+        model = ResNet50(num_classes=params.output_size, # Changed from params.num_classes
                          channels=params.channels)
     else:
         raise ValueError(f"Invalid model type in config: {model_type}")

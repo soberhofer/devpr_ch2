@@ -3,9 +3,9 @@
 name: ResNet50 # This should match the function name in models/resnet.py
 
 params:
-  # num_classes will be interpolated from the data config (e.g., data.n_classes)
-  # The ResNet50 function in resnet.py takes 'num_classes' as its first argument
-  num_classes: ${data.n_classes}
+  # output_size will be interpolated from the data config (e.g., data.n_classes)
+  # This will be passed as num_classes to the ResNet50 function.
+  output_size: ${data.n_classes}
 
   # Number of input channels for the spectrogram (default: 3 in the model code, 1 for our use case)
   # The ResNet50 function in resnet.py takes 'channels' as its second argument
