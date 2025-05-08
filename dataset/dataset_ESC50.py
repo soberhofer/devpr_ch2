@@ -151,66 +151,83 @@ class ESC50(data.Dataset):
         file_name = self.file_names[index]
         path = os.path.join(self.root, file_name)
         
-
         # identifying the label of the sample from its name
         temp = file_name.split('.')[0]
         class_id = int(temp.split('-')[-1])
-        if not index in self.cache_dict:# or index in self.cache_dict:
-            # Use self.sr
+
+        if index in self.cache_dict:
+            # Retrieve raw_wave and ensure class_id matches
+            raw_wave, cached_class_id = self.cache_dict[index]
+            assert class_id == cached_class_id, f"Class ID mismatch for index {index}: file says {class_id}, cache says {cached_class_id}"
+        else:
+            # Load and perform initial deterministic processing
             wave, rate = librosa.load(path, sr=self.sr)
             if wave.ndim == 1:
                 wave = wave[:, np.newaxis]
 
             # normalizing waves to [-1, 1]
-            if np.abs(wave.max()) > 1.0:
+            if np.abs(wave.max()) > 1.0: # Check if normalization is needed
                 wave = transforms.scale(wave, wave.min(), wave.max(), -1.0, 1.0)
             wave = wave.T * 32768.0
 
             # Remove silent sections
-            start = wave.nonzero()[1].min()
-            end = wave.nonzero()[1].max()
-            wave = wave[:, start: end + 1]
+            if np.any(wave): # Ensure there are non-zero elements before calling min/max
+                start = wave.nonzero()[1].min()
+                end = wave.nonzero()[1].max()
+                wave = wave[:, start: end + 1]
+            # else: wave remains as loaded if completely silent or becomes empty if not handled above
 
-            wave_copy = np.copy(wave)
-            wave_copy = self.wave_transforms(wave_copy)
-            wave_copy.squeeze_(0)
+            raw_wave = wave # This is the data to cache
+            self.cache_dict[index] = (raw_wave, class_id)
 
-            if self.n_mfcc:
-                # Use self.sr, self.n_mels, self.hop_length
-                mfcc = librosa.feature.mfcc(y=wave_copy.numpy(),
+        # Always apply transformations to a copy of the raw_wave
+        # Ensure raw_wave is valid before copying and transforming
+        if raw_wave is None or raw_wave.size == 0:
+            # This case should ideally be handled more robustly,
+            # e.g., by returning a pre-defined zero tensor or raising a specific error.
+            # For now, we'll proceed assuming valid raw_wave or that transforms handle empty inputs gracefully.
+            # print(f"Warning: raw_wave for index {index}, file {file_name} is empty or None. Proceeding with caution.")
+            # If transforms can't handle it, this will error out.
+            # A practical solution might be to return a zero tensor of expected feature shape.
+            # For this refactoring, we assume downstream can handle or it's an edge case not primarily addressed.
+            wave_to_transform = np.array([[]], dtype=raw_wave.dtype) if raw_wave is not None else np.array([[]]) # Create empty array if None
+        else:
+            wave_to_transform = np.copy(raw_wave)
+        
+        wave_to_transform = self.wave_transforms(wave_to_transform) # Apply random wave augmentations
+        wave_to_transform.squeeze_(0) # Remove channel dim if mono, ensure it's safe
+
+        # Feature extraction (MFCC or Mel Spectrogram)
+        # Ensure wave_to_transform.numpy() is safe (i.e., wave_to_transform is a Tensor)
+        # The self.wave_transforms is expected to return a Tensor.
+        
+        # Convert to numpy if it's a tensor, ensure it's float for librosa
+        processed_wave_numpy = wave_to_transform.numpy().astype(np.float32)
+
+
+        if self.n_mfcc:
+            mfcc = librosa.feature.mfcc(y=processed_wave_numpy,
+                                        sr=self.sr,
+                                        n_mels=self.n_mels,
+                                        n_fft=1024, 
+                                        hop_length=self.hop_length,
+                                        n_mfcc=self.n_mfcc)
+            feat = mfcc
+        else:
+            s = librosa.feature.melspectrogram(y=processed_wave_numpy,
                                             sr=self.sr,
                                             n_mels=self.n_mels,
-                                            n_fft=1024, # Keep n_fft hardcoded? Or add to config?
+                                            n_fft=1024, 
                                             hop_length=self.hop_length,
-                                            n_mfcc=self.n_mfcc)
-                feat = mfcc
-            else:
-                 # Use self.sr, self.n_mels, self.hop_length
-                s = librosa.feature.melspectrogram(y=wave_copy.numpy(),
-                                                sr=self.sr,
-                                                n_mels=self.n_mels,
-                                                n_fft=1024, # Keep n_fft hardcoded?
-                                                hop_length=self.hop_length,
-                                                #center=False,
-                                                )
-                log_s = librosa.power_to_db(s, ref=np.max)
+                                            )
+            log_s = librosa.power_to_db(s, ref=np.max)
+            log_s = self.spec_transforms(log_s) # Apply random spectrogram augmentations
+            feat = log_s
 
-                # masking the spectrograms
-                log_s = self.spec_transforms(log_s)
-
-                feat = log_s
-
-            # normalize
-            if self.global_mean:
-                feat = (feat - self.global_mean) / self.global_std
-            # add to cache
-            self.cache_dict[index] = (file_name, feat, class_id)
-        else:   
-            file_name, feat, class_id = self.cache_dict[index]
-            #rate = config.sr
+        # Normalize
+        if self.global_mean != 0.0 or self.global_std != 0.0: # Check if stats are actually set
+            feat = (feat - self.global_mean) / self.global_std
         
-        
-
         return file_name, feat, class_id
 
 
