@@ -110,7 +110,7 @@ class ESC50(data.Dataset):
         if train:
             # Define audiomentations pipeline for training
             self.audiomentations_pipeline = AudiomentationsCompose([
-                Gain(min_gain_in_db=-6.0, max_gain_in_db=6.0, p=0.3),
+                Gain(min_gain_db=-6.0, max_gain_db=6.0, p=0.3),
                 TimeStretch(min_rate=0.85, max_rate=1.15, p=0.3, leave_length_unchanged=False),
                 PitchShift(min_semitones=-2, max_semitones=2, p=0.3, sr=self.sr),
                 AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.01, p=0.3),
