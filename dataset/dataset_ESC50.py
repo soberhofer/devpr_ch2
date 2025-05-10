@@ -190,15 +190,31 @@ class ESC50(data.Dataset):
 
         # Apply audiomentations if training
         if self.subset == "train" and self.audiomentations_pipeline:
-            # audiomentations expects samples to be float32.
-            # It handles (channels, samples) or (samples,) for mono.
-            processed_wave_np = self.audiomentations_pipeline(
-                samples=processed_wave_np.astype(np.float32),
+            temp_processed_wave_np = processed_wave_np.astype(np.float32)
+
+            # Convert to mono by averaging channels if multichannel
+            if temp_processed_wave_np.ndim > 1 and temp_processed_wave_np.shape[0] > 1:
+                temp_processed_wave_np = np.mean(temp_processed_wave_np, axis=0)
+            elif temp_processed_wave_np.ndim > 1 and temp_processed_wave_np.shape[0] == 1: # Already (1, N)
+                temp_processed_wave_np = temp_processed_wave_np.squeeze(0) # Make it (N,) for audiomentations
+
+            # Ensure minimum length for LoudnessNormalization (pyloudnorm expects > 0.4s)
+            min_len_pyloudnorm = int(0.4 * self.sr)
+            if temp_processed_wave_np.shape[0] < min_len_pyloudnorm:
+                padding = np.zeros(min_len_pyloudnorm - temp_processed_wave_np.shape[0], dtype=temp_processed_wave_np.dtype)
+                temp_processed_wave_np = np.concatenate((temp_processed_wave_np, padding))
+            
+            # Apply audiomentations pipeline (expects mono (N,) array)
+            augmented_mono_wave_np = self.audiomentations_pipeline(
+                samples=temp_processed_wave_np,
                 sample_rate=self.sr
             )
-            # Ensure shape is still (C,N) if audiomentations changed it (e.g. mono processing by mistake)
-            if processed_wave_np.ndim == 1 and current_wave_np.shape[0] == 1: # Was mono (1,N), became (N,)
-                processed_wave_np = processed_wave_np[np.newaxis, :]
+            
+            # For subsequent processing, ensure it's a 2D array (1, num_samples)
+            if augmented_mono_wave_np.ndim == 1:
+                processed_wave_np = augmented_mono_wave_np[np.newaxis, :]
+            else: # Should not happen if pipeline outputs mono
+                processed_wave_np = augmented_mono_wave_np
 
         # Apply existing custom wave transforms (which expect Tensor)
         # The first transform in self.wave_transforms is torch.Tensor
