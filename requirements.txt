@@ -10,3 +10,4 @@ wandb==0.19.6
 hydra-core==1.3.2
 omegaconf==2.3.0
 audiomentations==0.41.0
+audiomentations[extras]
