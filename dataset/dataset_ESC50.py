@@ -11,7 +11,7 @@ import librosa
 
 # import config # Removed old config import
 from . import transforms
-from audiomentations import Compose as AudiomentationsCompose, AddGaussianNoise, TimeStretch, PitchShift, Gain
+from audiomentations import Compose as AudiomentationsCompose, AddGaussianNoise, TimeStretch, PitchShift, Gain, VolumeControl, AddBackgroundNoise
 
 # CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
@@ -110,10 +110,12 @@ class ESC50(data.Dataset):
         if train:
             # Define audiomentations pipeline for training
             self.audiomentations_pipeline = AudiomentationsCompose([
-                Gain(min_gain_db=-6.0, max_gain_db=6.0, p=0.3),
-                TimeStretch(min_rate=0.85, max_rate=1.15, p=0.3, leave_length_unchanged=False),
-                PitchShift(min_semitones=-2, max_semitones=2, p=0.3),
-                AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.01, p=0.3),
+                Gain(min_gain_db=-12.0, max_gain_db=12.0, p=0.5),
+                TimeStretch(min_rate=0.7, max_rate=1.3, p=0.5, leave_length_unchanged=False),
+                PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
+                AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.02, p=0.5),
+                VolumeControl(min_gain_in_db=-12, max_gain_in_db=12, p=0.5),
+                AddBackgroundNoise(sounds_path=self.root, min_snr_in_db=0, max_snr_in_db=20, p=0.5)
             ])
 
             # Existing custom wave transforms (expect PyTorch Tensor)
