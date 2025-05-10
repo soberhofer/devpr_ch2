@@ -199,7 +199,7 @@ class ESC50(data.Dataset):
                 temp_processed_wave_np = temp_processed_wave_np.squeeze(0) # Make it (N,) for audiomentations
 
             # Ensure minimum length for LoudnessNormalization (pyloudnorm expects > 0.4s)
-            min_len_pyloudnorm = int(0.4 * self.sr)
+            min_len_pyloudnorm = int(0.8 * self.sr)
             if temp_processed_wave_np.shape[0] < min_len_pyloudnorm:
                 padding = np.zeros(min_len_pyloudnorm - temp_processed_wave_np.shape[0], dtype=temp_processed_wave_np.dtype)
                 temp_processed_wave_np = np.concatenate((temp_processed_wave_np, padding))
