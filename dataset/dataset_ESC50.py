@@ -114,8 +114,8 @@ class ESC50(data.Dataset):
                 TimeStretch(min_rate=0.7, max_rate=1.3, p=0.5, leave_length_unchanged=False),
                 PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
                 AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.02, p=0.5),
-                LoudnessNormalization(min_lufs_in_db=-31.0, max_lufs_in_db=-13.0, p=0.5),
-                AddBackgroundNoise(sounds_path=self.root, min_snr_in_db=0, max_snr_in_db=20, p=0.5)
+                LoudnessNormalization(min_lufs=-31.0, max_lufs=-13.0, p=0.5),
+                AddBackgroundNoise(sounds_path=self.root, min_snr=0, max_snr=20, p=0.5)
             ])
 
             # Existing custom wave transforms (expect PyTorch Tensor)
