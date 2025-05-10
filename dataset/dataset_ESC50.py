@@ -190,15 +190,43 @@ class ESC50(data.Dataset):
 
         # Apply audiomentations if training
         if self.subset == "train" and self.audiomentations_pipeline:
+            # If audio is multichannel, convert to mono by averaging channels for audiomentations
+            # as some transforms like AddBackgroundNoise expect mono.
+            temp_processed_wave_np = processed_wave_np.astype(np.float32)
+            if temp_processed_wave_np.ndim > 1 and temp_processed_wave_np.shape[0] > 1:
+                temp_processed_wave_np = np.mean(temp_processed_wave_np, axis=0)
+
             # audiomentations expects samples to be float32.
             # It handles (channels, samples) or (samples,) for mono.
-            processed_wave_np = self.audiomentations_pipeline(
-                samples=processed_wave_np.astype(np.float32),
+            augmented_mono_wave_np = self.audiomentations_pipeline(
+                samples=temp_processed_wave_np, # This is now mono or already was mono
                 sample_rate=self.sr
             )
-            # Ensure shape is still (C,N) if audiomentations changed it (e.g. mono processing by mistake)
-            if processed_wave_np.ndim == 1 and current_wave_np.shape[0] == 1: # Was mono (1,N), became (N,)
-                processed_wave_np = processed_wave_np[np.newaxis, :]
+            
+            # After mono augmentations, if original was stereo, we might want to revert to stereo
+            # for subsequent processing or keep it mono. For now, let's assume subsequent
+            # custom wave_transforms can handle mono (N,) which will be converted to (1,N) tensor.
+            # If the original was stereo and we want to keep it stereo after mono-only augmentations,
+            # we might need to duplicate the mono augmented channel or handle it differently.
+            # For simplicity, we'll proceed with the (potentially) mono augmented_mono_wave_np.
+            # If it was originally mono, it remains (N,). If it was stereo, it's now (N,).
+            # The next step `self.wave_transforms` starts with `torch.Tensor`, which will
+            # convert (N,) to a 1D Tensor, and then `transforms.RandomPadding` etc.
+            # might need adjustment if they strictly expect (C,N) where C could be > 1.
+            # However, the current custom transforms seem to operate on the last dimension,
+            # so a 1D tensor (effectively (1,N) after unsqueeze if needed by conv layers) should be fine.
+
+            # Let's ensure processed_wave_np reflects the augmented version.
+            # If original was stereo, and we applied mono augmentations,
+            # we need to decide the shape of processed_wave_np for wave_transforms.
+            # If wave_transforms expects (C,N) and C was >1, we might need to duplicate the mono channel.
+            # Given the error, AddBackgroundNoise needs mono. So the input to pipeline is mono.
+            # The output of the pipeline will also be mono.
+            # We will then let wave_transforms handle this mono signal.
+            processed_wave_np = augmented_mono_wave_np
+            if processed_wave_np.ndim == 1: # Ensure it's at least 2D (1, N) for consistency if needed later
+                 processed_wave_np = processed_wave_np[np.newaxis, :]
+
 
         # Apply existing custom wave transforms (which expect Tensor)
         # The first transform in self.wave_transforms is torch.Tensor
