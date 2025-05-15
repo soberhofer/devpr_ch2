@@ -140,9 +140,9 @@ class ESC50(data.Dataset):
                 else:
                     train_originals, val_originals = train_test_split(original_train_filenames, test_size=self.val_size, random_state=0)
 
-                train_files = [f for f_cand in train_files_candidates 
+                train_files = [f_cand for f_cand in train_files_candidates
                                for f_orig in train_originals if f_cand.startswith(f_orig.split('.')[0])]
-                val_files = [f for f_cand in train_files_candidates 
+                val_files = [f_cand for f_cand in train_files_candidates
                              for f_orig in val_originals if f_cand.startswith(f_orig.split('.')[0])]
             else:
                 train_files = train_files_candidates
