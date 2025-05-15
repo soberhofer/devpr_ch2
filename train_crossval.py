@@ -361,7 +361,7 @@ def main(cfg: DictConfig):
                 scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
                                                             step_size=cfg.training.scheduler.step_size, # Use cfg
                                                             gamma=cfg.training.scheduler.gamma, # Use cfg
-                                                            verbose=cfg.training.scheduler.get('verbose', False)) # Add verbose
+                )
             elif cfg.training.scheduler.type == 'CyclicLR':
                 # Ensure required parameters exist in the config
                 required_cyclic_params = ['base_lr', 'max_lr', 'step_size_up']
@@ -379,7 +379,6 @@ def main(cfg: DictConfig):
                     cycle_momentum=cfg.training.scheduler.get('cycle_momentum', True),
                     base_momentum=cfg.training.scheduler.get('base_momentum', 0.8),
                     max_momentum=cfg.training.scheduler.get('max_momentum', 0.9),
-                     verbose=cfg.training.scheduler.get('verbose', False) # Add verbose
                  )
             elif cfg.training.scheduler.type == 'CosineAnnealingLR':
                 # Calculate T_max as total training iterations
@@ -390,7 +389,6 @@ def main(cfg: DictConfig):
                     optimizer,
                     T_max=cfg.training.epochs, # Maximum number of iterations.
                     eta_min=cfg.training.scheduler.eta_min, # Minimum learning rate.
-                    verbose=cfg.training.scheduler.get('verbose', False)
                 )
             else:
                  # Add other schedulers or a default/None option
