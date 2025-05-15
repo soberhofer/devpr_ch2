@@ -211,11 +211,13 @@ def make_model(cfg: DictConfig):
         # Instantiate ResNet50 using parameters from config
         # params.output_size (interpolated from data.n_classes) and params.channels are defined in conf/model/resnet50.yaml
         model = ResNet50(num_classes=params.output_size, # Changed from params.num_classes
-                         channels=params.get('channels', 1)) # Added .get() with default value 1
+                         channels=params.get('channels', 1), # Added .get() with default value 1
+                         dropout_prob=params.get('dropout_prob', 0.0))
     elif model_type == 'ResNet18':
         # Instantiate ResNet18 using parameters from config
         model = ResNet18(num_classes=params.output_size,
-                         channels=params.get('channels', 1))
+                         channels=params.get('channels', 1),
+                         dropout_prob=params.get('dropout_prob', 0.0))
     else:
         raise ValueError(f"Invalid model type in config: {model_type}")
     return model

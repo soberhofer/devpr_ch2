@@ -72,7 +72,7 @@ class Block(nn.Module):
         
         
 class ResNet(nn.Module):
-    def __init__(self, ResBlock, layer_list, num_classes, num_channels=3):
+    def __init__(self, ResBlock, layer_list, num_classes, num_channels=3, dropout_prob=0.0): # Added dropout_prob
         super(ResNet, self).__init__()
         self.in_channels = 64
         
@@ -87,6 +87,10 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(ResBlock, layer_list[3], planes=512, stride=2)
         
         self.avgpool = nn.AdaptiveAvgPool2d((1,1))
+        if dropout_prob > 0:
+            self.dropout = nn.Dropout(p=dropout_prob)
+        else:
+            self.dropout = None
         self.fc = nn.Linear(512*ResBlock.expansion, num_classes)
         
     def forward(self, x):
@@ -100,6 +104,8 @@ class ResNet(nn.Module):
         
         x = self.avgpool(x)
         x = x.reshape(x.shape[0], -1)
+        if self.dropout is not None:
+            x = self.dropout(x)
         x = self.fc(x)
         
         return x
@@ -124,14 +130,14 @@ class ResNet(nn.Module):
 
         
         
-def ResNet50(num_classes, channels=3):
-    return ResNet(Bottleneck, [3,4,6,3], num_classes, channels)
+def ResNet50(num_classes, channels=3, dropout_prob=0.0):
+    return ResNet(Bottleneck, [3,4,6,3], num_classes, channels, dropout_prob=dropout_prob)
     
-def ResNet101(num_classes, channels=3):
-    return ResNet(Bottleneck, [3,4,23,3], num_classes, channels)
+def ResNet101(num_classes, channels=3, dropout_prob=0.0):
+    return ResNet(Bottleneck, [3,4,23,3], num_classes, channels, dropout_prob=dropout_prob)
 
-def ResNet152(num_classes, channels=3):
-    return ResNet(Bottleneck, [3,8,36,3], num_classes, channels)
+def ResNet152(num_classes, channels=3, dropout_prob=0.0):
+    return ResNet(Bottleneck, [3,8,36,3], num_classes, channels, dropout_prob=dropout_prob)
 
-def ResNet18(num_classes, channels=3):
-    return ResNet(Block, [2,2,2,2], num_classes, channels)
+def ResNet18(num_classes, channels=3, dropout_prob=0.0):
+    return ResNet(Block, [2,2,2,2], num_classes, channels, dropout_prob=dropout_prob)

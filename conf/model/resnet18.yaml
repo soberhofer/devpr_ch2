@@ -10,3 +10,6 @@ params:
   # Number of input channels for the spectrogram (default: 3 in the model code, 1 for our use case)
   # The ResNet18 function in resnet.py takes 'channels' as its second argument
   channels: 1
+
+  # Dropout probability before the final fully connected layer (0.0 means no dropout)
+  dropout_prob: 0.0
