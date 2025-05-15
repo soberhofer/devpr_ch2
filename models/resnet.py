@@ -132,3 +132,6 @@ def ResNet101(num_classes, channels=3):
 
 def ResNet152(num_classes, channels=3):
     return ResNet(Bottleneck, [3,8,36,3], num_classes, channels)
+
+def ResNet18(num_classes, channels=3):
+    return ResNet(Block, [2,2,2,2], num_classes, channels)

@@ -1,0 +1,12 @@
+# Configuration for the ResNet18 model
+
+name: ResNet18 # This should match the function name in models/resnet.py
+
+params:
+  # output_size will be interpolated from the data config (e.g., data.n_classes)
+  # This will be passed as num_classes to the ResNet18 function.
+  output_size: ${data.n_classes}
+
+  # Number of input channels for the spectrogram (default: 3 in the model code, 1 for our use case)
+  # The ResNet18 function in resnet.py takes 'channels' as its second argument
+  channels: 1

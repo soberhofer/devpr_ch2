@@ -22,7 +22,7 @@ from models.model_classifier import AudioMLP, AudioCNN, TFCNN, TFCNN2
 from models.tfcnn import TFNet, Cnn
 from models.mobilenet import mobilenet_v3_large, mobilenet_v3_small # Keep V3 imports
 from models.mobilenetv2 import MobileNetV2Audio # Import V2 from its new file
-from models.resnet import ResNet50 # Import ResNet50
+from models.resnet import ResNet50, ResNet18 # Import ResNet50 and ResNet18
 from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
 # import config # Removed old config import
@@ -212,6 +212,10 @@ def make_model(cfg: DictConfig):
         # params.output_size (interpolated from data.n_classes) and params.channels are defined in conf/model/resnet50.yaml
         model = ResNet50(num_classes=params.output_size, # Changed from params.num_classes
                          channels=params.get('channels', 1)) # Added .get() with default value 1
+    elif model_type == 'ResNet18':
+        # Instantiate ResNet18 using parameters from config
+        model = ResNet18(num_classes=params.output_size,
+                         channels=params.get('channels', 1))
     else:
         raise ValueError(f"Invalid model type in config: {model_type}")
     return model
