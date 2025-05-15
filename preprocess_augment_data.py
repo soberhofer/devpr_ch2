@@ -12,7 +12,7 @@ def create_augmentations(cfg_audio: DictConfig):
     """Creates an audiomentations augmentation pipeline from config."""
     pipeline_steps = []
     if cfg_audio.get("gain", False):
-        pipeline_steps.append(Gain(min_gain_in_db=cfg_audio.gain.min_gain_db, max_gain_in_db=cfg_audio.gain.max_gain_db, p=cfg_audio.gain.p))
+        pipeline_steps.append(Gain(min_gain_db=cfg_audio.gain.min_gain_db, max_gain_db=cfg_audio.gain.max_gain_db, p=cfg_audio.gain.p))
     if cfg_audio.get("time_stretch", False):
         pipeline_steps.append(TimeStretch(min_rate=cfg_audio.time_stretch.min_rate, max_rate=cfg_audio.time_stretch.max_rate, p=cfg_audio.time_stretch.p, leave_length_unchanged=False))
     if cfg_audio.get("pitch_shift", False):
