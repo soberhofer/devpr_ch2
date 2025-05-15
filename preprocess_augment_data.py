@@ -7,6 +7,17 @@ from tqdm import tqdm
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import hydra.utils as hyu
+# Attempt to import the download utility from dataset_ESC50
+try:
+    from dataset.dataset_ESC50 import download_extract_zip
+except ImportError:
+    # Fallback or error if running in a context where dataset.dataset_ESC50 is not findable
+    # This might happen if the script is run from a directory where 'dataset' is not a sibling module
+    # For now, we'll assume it can be found. If not, sys.path manipulation might be needed
+    # or the download functions could be copied here.
+    print("Warning: Could not import download_extract_zip from dataset.dataset_ESC50. Download functionality will be missing.")
+    def download_extract_zip(url: str, file_path: str): # Dummy function
+        raise NotImplementedError("Download function not available due to import error.")
 
 def create_augmentations(cfg_audio: DictConfig):
     """Creates an audiomentations augmentation pipeline from config."""
@@ -42,11 +53,36 @@ def main(cfg: DictConfig):
     augment_pipeline = create_augmentations(cfg.augmentations)
     num_augmentations_per_file = cfg.settings.num_augmentations_per_file
     target_sr = cfg.settings.target_sr
+    download_if_missing = cfg.settings.get("download_if_missing", True) # Default to True
 
     if not os.path.isdir(original_audio_path):
-        print(f"Error: Original audio path not found or not a directory: {original_audio_path}")
-        print("Please ensure the ESC-50 dataset is downloaded and extracted at the specified location.")
-        return
+        print(f"Original audio path not found: {original_audio_path}")
+        if download_if_missing:
+            print("Attempting to download ESC-50 dataset...")
+            # original_data_dir is the root for ESC-50 (e.g., .../data/esc50)
+            # master.zip will be downloaded into original_data_dir
+            # and then extracted, creating ESC-50-master within original_data_dir
+            os.makedirs(original_data_dir, exist_ok=True)
+            file_name = 'master.zip'
+            zip_file_path = os.path.join(original_data_dir, file_name)
+            dataset_url = 'https://github.com/karoldvl/ESC-50/archive/master.zip'
+            
+            try:
+                download_extract_zip(url=dataset_url, file_path=zip_file_path)
+                print(f"Dataset downloaded and extracted to {original_data_dir}")
+                # Verify if original_audio_path (which is original_data_dir/ESC-50-master/audio) now exists
+                if not os.path.isdir(original_audio_path):
+                    print(f"Error: Dataset downloaded, but expected audio path still not found: {original_audio_path}")
+                    return
+            except Exception as e:
+                print(f"Error during download/extraction: {e}")
+                print("Please ensure the ESC-50 dataset is manually downloaded and extracted to the specified location.")
+                return
+        else:
+            print("Download_if_missing is false. Please ensure the dataset is present.")
+            return
+    else:
+        print(f"Found original audio path: {original_audio_path}")
 
     all_files = [f for f in os.listdir(original_audio_path) if f.endswith(".wav")]
     
