@@ -284,7 +284,7 @@ def main(cfg: DictConfig):
             # Use absolute data path and cfg for parameters
             # Pass required parameters from cfg to ESC50 constructor via partial
             get_fold_dataset = partial(ESC50,
-                                       root=data_path,
+                                       root=data_path, # Original data path, used for download if needed
                                        sr=cfg.data.sr,
                                        n_mels=cfg.data.n_mels,
                                        hop_length=cfg.data.hop_length,
@@ -292,7 +292,10 @@ def main(cfg: DictConfig):
                                        # n_mfcc=cfg.data.get('n_mfcc', None), # Pass n_mfcc if defined in data config
                                        download=True, # Keep download=True? Or make configurable?
                                        test_folds={test_fold},
-                                       global_mean_std=global_stats[test_fold - 1]) # Still using hardcoded stats
+                                       global_mean_std=global_stats[test_fold - 1], # Still using hardcoded stats
+                                       use_preprocessed_data=cfg.data.get('use_preprocessed_data', False),
+                                       preprocessed_data_root=hyu.to_absolute_path(cfg.data.preprocessed_data_path) if cfg.data.get('use_preprocessed_data', False) and cfg.data.preprocessed_data_path else None
+                                       )
 
             train_set = get_fold_dataset(subset="train")
             print('*****')

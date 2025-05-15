@@ -1,0 +1,45 @@
+# Hydra configuration for preprocess_augment_data.py
+# Paths are relative to the original working directory where the script is launched
+# (e.g., the project root: Challenge2/)
+
+defaults:
+  - _self_
+
+paths:
+  original_data_root: "data/esc50"    # Path to the directory containing ESC-50-master
+  augmented_data_root: "data_augmented/esc50" # Path to the directory where augmented ESC-50-master will be stored
+
+settings:
+  num_augmentations_per_file: 3 # Number of augmented versions per original file
+  target_sr: 44100              # Target sample rate, should match training
+
+augmentations:
+  # Configure which augmentations to apply and their parameters
+  # p: probability of applying the augmentation
+  gain:
+    p: 0.75
+    min_gain_db: -6.0
+    max_gain_db: 6.0
+  time_stretch:
+    p: 0.75
+    min_rate: 0.85
+    max_rate: 1.15
+  pitch_shift:
+    p: 0.75
+    min_semitones: -2.5
+    max_semitones: 2.5
+  gaussian_noise:
+    p: 0.5
+    min_amplitude: 0.001
+    max_amplitude: 0.01
+  loudness_normalization: # This can be intensive, use with care or lower probability
+    p: 0.0 # Disabled by default
+    min_lufs: -31.0
+    max_lufs: -13.0
+
+hydra:
+  run:
+    dir: ./outputs/preprocessing/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  job_logging:
+    root:
+      level: INFO

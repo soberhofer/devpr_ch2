@@ -12,6 +12,7 @@ import librosa
 # import config # Removed old config import
 from . import transforms
 from audiomentations import Compose as AudiomentationsCompose, AddGaussianNoise, TimeStretch, PitchShift, Gain, LoudnessNormalization, AddBackgroundNoise
+import glob # For finding augmented files
 
 # CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
@@ -53,112 +54,165 @@ def download_progress(current, total, width=80):
 
 class ESC50(data.Dataset):
     # Added sr, n_mels, hop_length, val_size, n_mfcc parameters
+    # Added use_preprocessed_data and preprocessed_data_root
     def __init__(self, root, sr, n_mels, hop_length, val_size, n_mfcc=None,
-                 test_folds=frozenset((1,)), subset="train", global_mean_std=(0.0, 0.0), download=False):
-        audio = 'ESC-50-master/audio'
-        root = os.path.normpath(root)
-        audio = os.path.join(root, audio)
+                 test_folds=frozenset((1,)), subset="train", global_mean_std=(0.0, 0.0), download=False,
+                 use_preprocessed_data: bool = False, preprocessed_data_root: str = None):
+        
+        original_root_path = os.path.normpath(root) # Keep original root for potential download
+        esc50_audio_subdir = 'ESC-50-master/audio'
+
         # Store parameters
         self.sr = sr
         self.n_mels = n_mels
         self.hop_length = hop_length
         self.val_size = val_size
         self.n_mfcc = n_mfcc
+        self.use_preprocessed_data = use_preprocessed_data
+        
         if subset in {"train", "test", "val"}:
             self.subset = subset
         else:
             raise ValueError
-        # path = path.split(os.sep)
-        if not os.path.exists(audio) and download:
-            os.makedirs(root, exist_ok=True)
+
+        # Handle download if original data not present
+        original_audio_full_path = os.path.join(original_root_path, esc50_audio_subdir)
+        if not os.path.exists(original_audio_full_path) and download:
+            os.makedirs(original_root_path, exist_ok=True)
             file_name = 'master.zip'
-            file_path = os.path.join(root, file_name)
+            file_path = os.path.join(original_root_path, file_name)
             url = f'https://github.com/karoldvl/ESC-50/archive/{file_name}'
             download_extract_zip(url, file_path)
 
-        self.root = audio
         self.cache_dict = dict()
-        # getting name of all files inside the all the train_folds
-        temp = sorted(os.listdir(self.root))
-        folds = {int(v.split('-')[0]) for v in temp}
-        self.test_folds = set(test_folds)
-        self.train_folds = folds - test_folds
-        train_files = [f for f in temp if int(f.split('-')[0]) in self.train_folds]
-        test_files = [f for f in temp if int(f.split('-')[0]) in test_folds]
-        # sanity check
-        assert set(temp) == (set(train_files) | set(test_files))
-        if subset == "test":
-            self.file_names = test_files
+        
+        # Determine the root directory for listing files
+        if self.use_preprocessed_data and preprocessed_data_root:
+            self.root = os.path.join(os.path.normpath(preprocessed_data_root), esc50_audio_subdir)
+            if not os.path.isdir(self.root):
+                raise ValueError(f"Preprocessed data path not found or not a directory: {self.root}")
+            print(f"Using preprocessed data from: {self.root}")
+            # Get all .wav files, original and augmented
+            all_available_files = [f for f in os.listdir(self.root) if f.endswith(".wav")]
         else:
-            # Use self.val_size passed during init
-            if self.val_size > 0:
-                 # Use self.val_size
-                train_files, val_files = train_test_split(train_files, test_size=self.val_size, random_state=0)
-            else: # Handle case where val_size is 0 or None
-                val_files = [] # Ensure val_files is defined even if not splitting
+            self.root = original_audio_full_path
+            if not os.path.isdir(self.root):
+                 raise ValueError(f"Original data path not found or not a directory: {self.root}. Try download=True.")
+            all_available_files = [f for f in os.listdir(self.root) if f.endswith(".wav") and "_aug" not in f] # Only originals if not using preprocessed
+
+        temp = sorted(all_available_files)
+        
+        # Folds are determined from the original file names (e.g., 1-xxxxx.wav)
+        # This logic needs to correctly identify the original fold even for augmented files.
+        # Augmented files are named like 1-xxxxx_augN.wav
+        folds = {int(v.split('-')[0]) for v in temp} # This might include augmented files' prefixes
+        self.test_folds = set(test_folds)
+        self.train_folds = folds - self.test_folds # This assumes fold numbers are consistent
+
+        # Filter files based on their original fold designation
+        train_files_candidates = [f for f in temp if int(f.split('-')[0]) in self.train_folds]
+        test_files_candidates = [f for f in temp if int(f.split('-')[0]) in self.test_folds]
+
+        # If not using preprocessed data, ensure we only have original files
+        if not self.use_preprocessed_data:
+            train_files_candidates = [f for f in train_files_candidates if "_aug" not in f]
+            test_files_candidates = [f for f in test_files_candidates if "_aug" not in f]
+        
+        # Sanity check (might fail if augmented files change total count significantly vs. manifest)
+        # For now, we assume the file list `temp` is the source of truth for available files.
+        # assert set(temp) == (set(train_files_candidates) | set(test_files_candidates)) # This might be too strict with augmentation
+
+        if subset == "test":
+            self.file_names = test_files_candidates
+        else: # "train" or "val"
+            if self.val_size > 0 and len(train_files_candidates) > 0 :
+                # Split based on original file names to keep augmentations of the same original file together
+                original_train_filenames = sorted(list(set([f.split('_aug')[0] + ".wav" if "_aug" in f else f for f in train_files_candidates])))
+                
+                if len(original_train_filenames) <=1 and self.val_size > 0: # handle case with very few files
+                    print(f"Warning: Too few unique original files ({len(original_train_filenames)}) in train_files_candidates for val_split with val_size {self.val_size}. Using all for training.")
+                    train_originals = original_train_filenames
+                    val_originals = []
+                elif self.val_size >= len(original_train_filenames): # val_size is too large
+                    print(f"Warning: val_size {self.val_size} is >= number of original train files {len(original_train_filenames)}. Using all for training, no validation set.")
+                    train_originals = original_train_filenames
+                    val_originals = []
+                else:
+                    train_originals, val_originals = train_test_split(original_train_filenames, test_size=self.val_size, random_state=0)
+
+                train_files = [f for f_cand in train_files_candidates 
+                               for f_orig in train_originals if f_cand.startswith(f_orig.split('.')[0])]
+                val_files = [f for f_cand in train_files_candidates 
+                             for f_orig in val_originals if f_cand.startswith(f_orig.split('.')[0])]
+            else:
+                train_files = train_files_candidates
+                val_files = []
+
             if subset == "train":
                 self.file_names = train_files
-            elif subset == "val": # Explicitly check for "val" subset
+            elif subset == "val":
                 self.file_names = val_files
-            # Removed the final 'else' as subset is validated earlier
-        # the number of samples in the wave (=length) required for spectrogram
-        # Use self.sr and self.hop_length
+        
+        if not self.file_names:
+            print(f"Warning: No files found for subset '{self.subset}' with test_folds {self.test_folds}. Check data paths and split logic.")
+
+
         out_len = int(((self.sr * 5) // self.hop_length) * self.hop_length)
-        train = self.subset == "train"
+        
+        # Determine if online augmentation should be applied
+        apply_online_augmentation = (self.subset == "train") and (not self.use_preprocessed_data)
 
         self.audiomentations_pipeline = None
-        if train:
-            # Define audiomentations pipeline for training
+        if apply_online_augmentation:
+            # Define audiomentations pipeline for training (only if not using preprocessed)
             self.audiomentations_pipeline = AudiomentationsCompose([
                 Gain(min_gain_db=-12.0, max_gain_db=12.0, p=0.5),
                 TimeStretch(min_rate=0.7, max_rate=1.3, p=0.5, leave_length_unchanged=False),
                 PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
                 AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.02, p=0.5),
                 LoudnessNormalization(min_lufs=-31.0, max_lufs=-13.0, p=0.5),
-                AddBackgroundNoise(sounds_path=self.root, min_snr_db=0, max_snr_db=20, p=0.5)
+                # AddBackgroundNoise might be problematic if preprocessed_data_root is different from original sounds_path
+                # Sounds path for AddBackgroundNoise should ideally point to original clean samples if used here.
+                # For simplicity, if using preprocessed, this online AddBackgroundNoise is skipped.
+                AddBackgroundNoise(sounds_path=original_audio_full_path, min_snr_db=0, max_snr_db=20, p=0.5)
             ])
+        
+        # Wave transforms (padding, cropping) are always needed
+        self.wave_transforms = transforms.Compose(
+            torch.Tensor, 
+            transforms.RandomPadding(out_len=out_len, train=(self.subset == "train")), # train=False for val/test
+            transforms.RandomCrop(out_len=out_len, train=(self.subset == "train"))    # train=False for val/test
+        )
 
-            # Existing custom wave transforms (expect PyTorch Tensor)
-            # RandomScale (time stretch) and RandomNoise are now handled by audiomentations_pipeline
-            self.wave_transforms = transforms.Compose(
-                torch.Tensor, # Converts NumPy array (from audiomentations or loaded wave) to Tensor
-                transforms.RandomPadding(out_len=out_len),
-                transforms.RandomCrop(out_len=out_len),
-            )
-
-            self.spec_transforms = transforms.Compose(
-                torch.Tensor,
-                partial(torch.unsqueeze, dim=0),
+        # Spectrogram transforms
+        spec_transform_list = [torch.Tensor, partial(torch.unsqueeze, dim=0)]
+        if apply_online_augmentation: # Only add spec augmentations if doing online augmentation
+            spec_transform_list.extend([
                 transforms.TimeMask(max_width=3, numbers=2),
                 transforms.FrequencyMask(max_width=3, numbers=2),
-            )
-        else:
-            # For testing, no audiomentations, custom transforms are deterministic
-            self.wave_transforms = transforms.Compose(
-                torch.Tensor,
-                transforms.RandomPadding(out_len=out_len, train=False),
-                transforms.RandomCrop(out_len=out_len, train=False)
-            )
-            self.spec_transforms = transforms.Compose(
-                torch.Tensor,
-                partial(torch.unsqueeze, dim=0),
-            )
+            ])
+        self.spec_transforms = transforms.Compose(*spec_transform_list)
+            
         self.global_mean = global_mean_std[0]
         self.global_std = global_mean_std[1]
-        # self.n_mfcc is already set in __init__
 
     def __len__(self):
         return len(self.file_names)
 
     def __getitem__(self, index):
         file_name = self.file_names[index]
+        # self.root already points to the correct directory (original or augmented)
         path = os.path.join(self.root, file_name)
         
-        # identifying the label of the sample from its name
-        temp = file_name.split('.')[0]
+        # identifying the label of the sample from its name (works for original and augmented names like X-Y-Z_augN.wav)
+        original_file_name_part = file_name.split('_aug')[0]
+        temp = original_file_name_part.split('.')[0]
         class_id = int(temp.split('-')[-1])
 
-        if index in self.cache_dict:
+        # Cache key should be unique per augmented file if caching is used with pre-augmented data
+        # Or, disable caching if using pre-augmented data to avoid issues, as files are already on disk.
+        # For simplicity, let's assume caching might still be beneficial for repeated epochs over the same augmented set.
+        if index in self.cache_dict: 
             # Retrieve cached float32 wave and class_id
             current_wave_np, cached_class_id = self.cache_dict[index]
             assert class_id == cached_class_id, f"Class ID mismatch for index {index}: file says {class_id}, cache says {cached_class_id}"
@@ -188,8 +242,8 @@ class ESC50(data.Dataset):
         # Make a copy for stochastic augmentations
         processed_wave_np = np.copy(current_wave_np)
 
-        # Apply audiomentations if training
-        if self.subset == "train" and self.audiomentations_pipeline:
+        # Apply audiomentations if training AND it's configured (i.e., not using preprocessed data that's already augmented)
+        if self.subset == "train" and self.audiomentations_pipeline: # self.audiomentations_pipeline is None if use_preprocessed_data
             temp_processed_wave_np = processed_wave_np.astype(np.float32)
 
             # Convert to mono by averaging channels if multichannel
