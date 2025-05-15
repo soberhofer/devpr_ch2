@@ -47,7 +47,7 @@ class Block(nn.Module):
 
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, stride=stride, bias=False)
         self.batch_norm1 = nn.BatchNorm2d(out_channels)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, stride=stride, bias=False)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, stride=1, bias=False) # Changed stride to 1
         self.batch_norm2 = nn.BatchNorm2d(out_channels)
 
         self.i_downsample = i_downsample
@@ -57,13 +57,13 @@ class Block(nn.Module):
     def forward(self, x):
       identity = x.clone()
 
-      x = self.relu(self.batch_norm2(self.conv1(x)))
+      x = self.relu(self.batch_norm1(self.conv1(x))) # Changed batch_norm2 to batch_norm1
       x = self.batch_norm2(self.conv2(x))
 
       if self.i_downsample is not None:
           identity = self.i_downsample(identity)
-      print(x.shape)
-      print(identity.shape)
+      # print(x.shape) # Removed debug print
+      # print(identity.shape) # Removed debug print
       x += identity
       x = self.relu(x)
       return x
