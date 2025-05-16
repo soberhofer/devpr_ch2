@@ -40,7 +40,7 @@ augmentations:
     p: 0.5
     min_band_part: 0.05
     max_band_part: 0.20
-    fade: false
+    fade_duration: 0.0
 
 hydra:
   run:

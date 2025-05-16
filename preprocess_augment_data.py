@@ -25,7 +25,7 @@ def create_augmentations(cfg_audio: DictConfig):
         pipeline_steps.append(TimeMask(
             min_band_part=cfg_audio.time_mask.min_band_part,
             max_band_part=cfg_audio.time_mask.max_band_part,
-            fade=cfg_audio.time_mask.get("fade", False),
+            fade_duration=cfg_audio.time_mask.get("fade_duration", 0.0),
             p=cfg_audio.time_mask.p
         ))
     # Add other augmentations from your config as needed
