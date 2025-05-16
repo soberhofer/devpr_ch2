@@ -36,6 +36,11 @@ augmentations:
     p: 0.0 # Disabled by default
     min_lufs: -31.0
     max_lufs: -13.0
+  time_mask:
+    p: 0.5
+    min_band_part: 0.05
+    max_band_part: 0.20
+    fade: false
 
 hydra:
   run:

@@ -2,22 +2,11 @@ import os
 import librosa
 import soundfile as sf
 import numpy as np
-from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Gain, LoudnessNormalization
+from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Gain, LoudnessNormalization, TimeMask
 from tqdm import tqdm
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import hydra.utils as hyu
-# Attempt to import the download utility from dataset_ESC50
-try:
-    from dataset.dataset_ESC50 import download_extract_zip
-except ImportError:
-    # Fallback or error if running in a context where dataset.dataset_ESC50 is not findable
-    # This might happen if the script is run from a directory where 'dataset' is not a sibling module
-    # For now, we'll assume it can be found. If not, sys.path manipulation might be needed
-    # or the download functions could be copied here.
-    print("Warning: Could not import download_extract_zip from dataset.dataset_ESC50. Download functionality will be missing.")
-    def download_extract_zip(url: str, file_path: str): # Dummy function
-        raise NotImplementedError("Download function not available due to import error.")
 
 def create_augmentations(cfg_audio: DictConfig):
     """Creates an audiomentations augmentation pipeline from config."""
@@ -32,6 +21,13 @@ def create_augmentations(cfg_audio: DictConfig):
         pipeline_steps.append(AddGaussianNoise(min_amplitude=cfg_audio.gaussian_noise.min_amplitude, max_amplitude=cfg_audio.gaussian_noise.max_amplitude, p=cfg_audio.gaussian_noise.p))
     if cfg_audio.get("loudness_normalization", False):
         pipeline_steps.append(LoudnessNormalization(min_lufs=cfg_audio.loudness_normalization.min_lufs, max_lufs=cfg_audio.loudness_normalization.max_lufs, p=cfg_audio.loudness_normalization.p))
+    if cfg_audio.get("time_mask", False):
+        pipeline_steps.append(TimeMask(
+            min_band_part=cfg_audio.time_mask.min_band_part,
+            max_band_part=cfg_audio.time_mask.max_band_part,
+            fade=cfg_audio.time_mask.get("fade", False),
+            p=cfg_audio.time_mask.p
+        ))
     # Add other augmentations from your config as needed
     return Compose(pipeline_steps)
 
@@ -53,36 +49,11 @@ def main(cfg: DictConfig):
     augment_pipeline = create_augmentations(cfg.augmentations)
     num_augmentations_per_file = cfg.settings.num_augmentations_per_file
     target_sr = cfg.settings.target_sr
-    download_if_missing = cfg.settings.get("download_if_missing", True) # Default to True
 
     if not os.path.isdir(original_audio_path):
-        print(f"Original audio path not found: {original_audio_path}")
-        if download_if_missing:
-            print("Attempting to download ESC-50 dataset...")
-            # original_data_dir is the root for ESC-50 (e.g., .../data/esc50)
-            # master.zip will be downloaded into original_data_dir
-            # and then extracted, creating ESC-50-master within original_data_dir
-            os.makedirs(original_data_dir, exist_ok=True)
-            file_name = 'master.zip'
-            zip_file_path = os.path.join(original_data_dir, file_name)
-            dataset_url = 'https://github.com/karoldvl/ESC-50/archive/master.zip'
-            
-            try:
-                download_extract_zip(url=dataset_url, file_path=zip_file_path)
-                print(f"Dataset downloaded and extracted to {original_data_dir}")
-                # Verify if original_audio_path (which is original_data_dir/ESC-50-master/audio) now exists
-                if not os.path.isdir(original_audio_path):
-                    print(f"Error: Dataset downloaded, but expected audio path still not found: {original_audio_path}")
-                    return
-            except Exception as e:
-                print(f"Error during download/extraction: {e}")
-                print("Please ensure the ESC-50 dataset is manually downloaded and extracted to the specified location.")
-                return
-        else:
-            print("Download_if_missing is false. Please ensure the dataset is present.")
-            return
-    else:
-        print(f"Found original audio path: {original_audio_path}")
+        print(f"Error: Original audio path not found or not a directory: {original_audio_path}")
+        print("Please ensure the ESC-50 dataset is downloaded and extracted at the specified location.")
+        return
 
     all_files = [f for f in os.listdir(original_audio_path) if f.endswith(".wav")]
     

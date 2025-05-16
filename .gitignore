@@ -1,6 +1,7 @@
 outputs
 results
 /data
+/data_augmented
 .DS_Store
 *.pyc
 wandb
