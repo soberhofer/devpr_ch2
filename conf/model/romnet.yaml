@@ -1,0 +1,6 @@
+# @package _group_
+name: Romnet
+params:
+  output_size: ${data.n_classes} # Interpolated from data config
+  channels: 1                   # Number of input channels (e.g., 1 for grayscale spectrogram)
+  dropout_prob: 0.2             # Dropout probability for Romnet layers

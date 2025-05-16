@@ -23,6 +23,7 @@ from models.tfcnn import TFNet, Cnn
 from models.mobilenet import mobilenet_v3_large, mobilenet_v3_small # Keep V3 imports
 from models.mobilenetv2 import MobileNetV2Audio # Import V2 from its new file
 from models.resnet import ResNet50, ResNet18 # Import ResNet50 and ResNet18
+from models.romnet import Romnet # Import Romnet
 from models.utils import EarlyStopping, Tee
 from dataset.dataset_ESC50 import ESC50
 # import config # Removed old config import
@@ -218,6 +219,11 @@ def make_model(cfg: DictConfig):
         model = ResNet18(num_classes=params.output_size,
                          channels=params.get('channels', 1),
                          dropout_prob=params.get('dropout_prob', 0.0))
+    elif model_type == 'Romnet':
+        # Instantiate Romnet using parameters from config
+        model = Romnet(num_classes=params.output_size,
+                       channels=params.get('channels', 1), # Default to 1 input channel
+                       dropout_prob=params.get('dropout_prob', 0.2)) # Default dropout_prob to 0.2
     else:
         raise ValueError(f"Invalid model type in config: {model_type}")
     return model
