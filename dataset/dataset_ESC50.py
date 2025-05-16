@@ -186,10 +186,13 @@ class ESC50(data.Dataset):
 
         # Spectrogram transforms
         spec_transform_list = [torch.Tensor, partial(torch.unsqueeze, dim=0)]
-        if apply_online_augmentation: # Only add spec augmentations if doing online augmentation
+        # Apply SpecAugment (TimeMask, FrequencyMask) only to the training set,
+        # regardless of whether use_preprocessed_data is true or false.
+        # This allows applying spectrogram augmentations on top of potentially pre-augmented waveform data.
+        if self.subset == "train":
             spec_transform_list.extend([
-                transforms.TimeMask(max_width=3, numbers=2),
-                transforms.FrequencyMask(max_width=3, numbers=2),
+                transforms.TimeMask(max_width=3, numbers=2), # Parameters can be tuned
+                transforms.FrequencyMask(max_width=3, numbers=2), # Parameters can be tuned
             ])
         self.spec_transforms = transforms.Compose(*spec_transform_list)
             
