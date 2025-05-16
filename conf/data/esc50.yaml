@@ -9,6 +9,10 @@ sr: 44100
 n_mels: 128
 hop_length: 512
 
+prob_aug_wave: 0.2 # Probability of applying wave augmentation
+prob_aug_spec: 0.2 # Probability of applying spectrogram augmentation
+num_aug: 3 # Number of augmentations per audio file
+
 # Dataset properties
 n_classes: 50
 folds: 5

@@ -304,12 +304,14 @@ def main(cfg: DictConfig):
                                        # n_mfcc=cfg.data.get('n_mfcc', None), # Pass n_mfcc if defined in data config
                                        download=True, # Keep download=True? Or make configurable?
                                        test_folds={test_fold},
+                                       prob_aug_wave=cfg.data.get('prob_aug_wave', 0.0), # Use cfg
+                                       prob_aug_spec=cfg.data.get('prob_aug_spec', 0.0), # Use cfg
                                        global_mean_std=global_stats[test_fold - 1], # Still using hardcoded stats
                                        use_preprocessed_data=cfg.data.get('use_preprocessed_data', False),
                                        preprocessed_data_root=hyu.to_absolute_path(cfg.data.preprocessed_data_path) if cfg.data.get('use_preprocessed_data', False) and cfg.data.preprocessed_data_path else None
                                        )
 
-            train_set = get_fold_dataset(subset="train")
+            train_set = get_fold_dataset(subset="train", num_aug=cfg.data.num_aug) # Use cfg)
             print('*****')
             print(f'Train folds: {train_set.train_folds}, Test fold: {train_set.test_folds}')
             # print('random wave cropping') # Assuming this happens inside ESC50 dataset
