@@ -2,6 +2,7 @@
 # pip install torch==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
 torch
 torchvision
+torchaudio
 numpy==1.26.4
 librosa==0.10.2.post1
 scikit-learn==1.6.1
