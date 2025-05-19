@@ -1,13 +1,15 @@
-# Repo/conf/testing/default.yaml
-# Default testing parameters
+# @package _group_
+# Default configuration for testing
 
-# Experiment to load checkpoints from
-# Note: This might be better handled dynamically or via command-line override
-experiment_dir: 'results/sample-run'
+cvpath: "outputs/YYYY-MM-DD/HH-MM-SS" # Placeholder: Path to the trained model's cross-validation output directory (outputs from a train_crossval.py run)
+# Users should override this with the actual path to their training outputs.
+# Example: outputs/2023-10-27/12-34-56 (if Hydra multirun was used for training)
+# Or: results/some_experiment_id (if a custom path was used)
 
-# Checkpoints to load for testing within the experiment_dir
-checkpoints: ['terminal.pt'] # Was ['terminal.pt', 'best_val_loss.pt'] in original comments
+checkpoints:
+  - "best_val_loss.pt"
+  - "terminal.pt"
 
-# Batch size for testing (can be different from training)
-# If not specified, could potentially reuse training.batch_size
-# batch_size: 128 # Example if you want a specific test batch size
+batch_size: 64
+num_workers: 4
+device_id: 0 # GPU device ID, 0 for first GPU.
