@@ -1,4 +1,3 @@
-# @package _group_
 # Default configuration for testing
 
 cvpath: "outputs/YYYY-MM-DD/HH-MM-SS" # Placeholder: Path to the trained model's cross-validation output directory (outputs from a train_crossval.py run)

@@ -102,17 +102,17 @@ def train_epoch(cfg: DictConfig, model, train_loader, criterion, optimizer, devi
     return acc, losses
 
 
-# Added cfg, model, train_loader, val_loader, criterion, optimizer, scheduler, device, experiment_dir, float_fmt parameters
+# Added cfg, model, train_loader, val_loader, criterion, optimizer, scheduler, device, fold_output_dir, float_fmt parameters
 # Note: 'run' object is not passed here, we check cfg directly
-def fit_classifier(cfg: DictConfig, model, train_loader, val_loader, criterion, optimizer, scheduler, device, experiment_dir, float_fmt):
+def fit_classifier(cfg: DictConfig, model, train_loader, val_loader, criterion, optimizer, scheduler, device, fold_output_dir, float_fmt):
     num_epochs = cfg.training.epochs # Use cfg
 
-    # Use Hydra's current working directory for checkpoints
-    best_val_loss_path = os.path.join(experiment_dir, 'best_val_loss.pt')
-    terminal_path = os.path.join(experiment_dir, 'terminal.pt')
+    # Checkpoints are saved in the fold-specific output directory
+    best_val_loss_path = os.path.join(fold_output_dir, 'best_val_loss.pt')
+    terminal_path = os.path.join(fold_output_dir, 'terminal.pt')
 
     loss_stopping = EarlyStopping(patience=cfg.training.patience, delta=0.002, verbose=True, float_fmt=float_fmt, # Use cfg
-                                  checkpoint_file=best_val_loss_path) # Use updated path
+                                  checkpoint_file=best_val_loss_path)
 
     pbar = tqdm(range(1, 1 + num_epochs), ncols=50, unit='ep', file=sys.stdout, ascii=True)
     for epoch in (range(1, 1 + num_epochs)):
@@ -274,8 +274,12 @@ def main(cfg: DictConfig):
         # For simplicity here, we'll use the Hydra CWD for each fold's run.
         # If running folds sequentially, Hydra creates a new dir each time.
         # If running in parallel (e.g., via sweep), Hydra handles subdirs.
-        current_run_dir = os.getcwd() # Hydra sets this
-        print(f"Output directory for fold {test_fold}: {current_run_dir}")
+        current_run_dir = os.getcwd() # Hydra sets this (main output dir for the entire run if not sweeping over folds)
+        
+        # Create a specific output directory for this fold's artifacts
+        fold_output_dir = os.path.join(current_run_dir, str(test_fold))
+        os.makedirs(fold_output_dir, exist_ok=True)
+        print(f"Output directory for fold {test_fold}: {fold_output_dir}")
 
         # Initialize WandB for the current fold if enabled
         run = None # Initialize run to None
@@ -427,13 +431,15 @@ def main(cfg: DictConfig):
 
             # --- Training ---
             print("\n--- Starting Training ---")
-            # Pass all required arguments to fit_classifier
-            fit_classifier(cfg, model, train_loader, val_loader, criterion, optimizer, scheduler, device, current_run_dir, float_fmt)
+            # Pass fold_output_dir to fit_classifier
+            fit_classifier(cfg, model, train_loader, val_loader, criterion, optimizer, scheduler, device, fold_output_dir, float_fmt)
             print("--- Training Finished ---")
 
 
             # --- Testing ---
-            print("\n--- Starting Testing ---")
+            # This internal testing block evaluates the model trained for the current fold.
+            # test_crossval.py is for testing pre-existing models from a completed training run.
+            print("\n--- Starting Testing for current fold ---")
             test_loader = torch.utils.data.DataLoader(get_fold_dataset(subset="test"),
                                                       batch_size=cfg.training.batch_size, # Use cfg (or define test batch size)
                                                       shuffle=False,
@@ -441,11 +447,11 @@ def main(cfg: DictConfig):
                                                       drop_last=False,
                                                       )
 
-            # Load the best model saved by EarlyStopping for testing
-            best_model_path = os.path.join(current_run_dir, 'best_val_loss.pt')
-            if os.path.exists(best_model_path):
-                 print(f"Loading best model from: {best_model_path}")
-                 model.load_state_dict(torch.load(best_model_path)) # Load best model state
+            # Load the best model saved by EarlyStopping for this fold for testing
+            best_model_fold_path = os.path.join(fold_output_dir, 'best_val_loss.pt') # Path to this fold's best model
+            if os.path.exists(best_model_fold_path):
+                 print(f"Loading best model for fold {test_fold} from: {best_model_fold_path}")
+                 model.load_state_dict(torch.load(best_model_fold_path)) # Load best model state
             else:
                  print("Warning: best_val_loss.pt not found. Testing with the terminal model.")
                  # If best model isn't found, the model variable holds the terminal state
