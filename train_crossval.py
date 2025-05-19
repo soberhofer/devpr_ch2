@@ -294,24 +294,37 @@ def main(cfg: DictConfig):
 
             # --- Data Loading ---
             # Use absolute data path and cfg for parameters
-            # Pass required parameters from cfg to InMemoryESC50 constructor via partial
-            get_fold_dataset = partial(InMemoryESC50, # Changed to InMemoryESC50
+            
+            dataset_class_to_use = None
+            if cfg.data.dataset_type == "in_memory":
+                dataset_class_to_use = InMemoryESC50
+                print("Using InMemoryESC50 dataset.")
+            elif cfg.data.dataset_type == "standard":
+                dataset_class_to_use = ESC50
+                print("Using standard ESC50 dataset.")
+            else:
+                raise ValueError(f"Unsupported dataset_type: {cfg.data.dataset_type}")
+
+            # Pass required parameters from cfg to the selected dataset constructor via partial
+            get_fold_dataset = partial(dataset_class_to_use,
                                        root=data_path, # Original data path, used for download if needed
                                        sr=cfg.data.sr,
                                        n_mels=cfg.data.n_mels,
                                        hop_length=cfg.data.hop_length,
                                        val_size=cfg.training.val_size,
-                                       # n_mfcc=cfg.data.get('n_mfcc', None), # Pass n_mfcc if defined in data config
-                                       download=True, # Keep download=True? Or make configurable?
+                                       n_mfcc=cfg.data.get('n_mfcc', None), # Pass n_mfcc if defined
+                                       download=cfg.data.get('download', True), # Make download configurable, default True
                                        test_folds={test_fold},
-                                       prob_aug_wave=cfg.data.get('prob_aug_wave', 0.0), # Use cfg
-                                       prob_aug_spec=cfg.data.get('prob_aug_spec', 0.0), # Use cfg
+                                       prob_aug_wave=cfg.data.get('prob_aug_wave', 0.0),
+                                       prob_aug_spec=cfg.data.get('prob_aug_spec', 0.0),
                                        global_mean_std=global_stats[test_fold - 1], # Still using hardcoded stats
-                                       use_preprocessed_data=cfg.data.get('use_preprocessed_data', False),
-                                       preprocessed_data_root=hyu.to_absolute_path(cfg.data.preprocessed_data_path) if cfg.data.get('use_preprocessed_data', False) and cfg.data.preprocessed_data_path else None
+                                       num_aug=cfg.data.num_aug, # Pass num_aug, used by both if applicable
+                                       # Conditional parameters for standard ESC50's external preprocessing
+                                       use_preprocessed_data=cfg.data.get('use_preprocessed_data', False) if dataset_class_to_use == ESC50 else False,
+                                       preprocessed_data_root=hyu.to_absolute_path(cfg.data.preprocessed_data_path) if dataset_class_to_use == ESC50 and cfg.data.get('use_preprocessed_data', False) and cfg.data.get('preprocessed_data_path') else None
                                        )
 
-            train_set = get_fold_dataset(subset="train", num_aug=cfg.data.num_aug) # Use cfg)
+            train_set = get_fold_dataset(subset="train") # num_aug is now part of partial
             print('*****')
             print(f'Train folds: {train_set.train_folds}, Test fold: {train_set.test_folds}')
             # print('random wave cropping') # Assuming this happens inside ESC50 dataset

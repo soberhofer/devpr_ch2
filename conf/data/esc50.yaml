@@ -21,3 +21,6 @@ test_folds: [1, 2, 3, 4, 5] # Folds used for testing
 # Offline augmentation settings
 use_preprocessed_data: false
 preprocessed_data_path: "../data_augmented/esc50" # Path to the directory containing augmented ESC-50-master, relative to script launch dir (e.g. Repo/)
+
+# Dataset loading strategy
+dataset_type: "standard" # Options: "standard", "in_memory"
