@@ -1,9 +1,8 @@
 # Default configuration for testing
 
-cvpath: "outputs/YYYY-MM-DD/HH-MM-SS" # Placeholder: Path to the trained model's cross-validation output directory (outputs from a train_crossval.py run)
-# Users should override this with the actual path to their training outputs.
-# Example: outputs/2023-10-27/12-34-56 (if Hydra multirun was used for training)
-# Or: results/some_experiment_id (if a custom path was used)
+cvpath: "latest" # Special value: "latest" to find the most recent run in cfg.runs_path, or provide a specific path.
+# Example specific path: "results/2023-10-27-12-34-56" (relative to Repo/ if running from Repo/)
+# The script will look for fold subdirectories (1, 2, 3, etc.) inside this path.
 
 checkpoints:
   - "best_val_loss.pt"

@@ -4,11 +4,13 @@ import subprocess
 import pandas as pd
 import numpy as np
 import os
+import re # For regex matching of directory names
+import datetime as dt # For robust date parsing if needed, though string sort might suffice
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import hydra.utils as hyu
 
-from dataset.dataset_ESC50 import ESC50, InMemoryESC50, download_extract_zip # Added InMemoryESC50
+from dataset.dataset_ESC50 import ESC50, InMemoryESC50, download_extract_zip
 from train_crossval import test, make_model, global_stats
 # import config # Removed config import
 
@@ -45,22 +47,55 @@ def main(cfg: DictConfig):
     pd.options.display.float_format = (f'{{:,{float_fmt}}}').format # Python 3.6+ f-string
 
     # experiment_root is the path to the trained model's output directory
-    # This should come from cfg.testing.cvpath and be an absolute path or resolvable
-    experiment_root = hyu.to_absolute_path(cfg.testing.cvpath) # Use Hydra config
-    
+    if cfg.testing.cvpath == "latest":
+        runs_root_path = hyu.to_absolute_path(cfg.runs_path) # cfg.runs_path is 'results'
+        if not os.path.isdir(runs_root_path):
+            print(f"Error: Runs directory '{runs_root_path}' not found. Cannot determine latest run.")
+            return
+        
+        # Regex to match YYYY-MM-DD-HH-MM-SS pattern
+        dir_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$")
+        
+        potential_run_dirs = []
+        for dirname in os.listdir(runs_root_path):
+            if dir_pattern.match(dirname) and os.path.isdir(os.path.join(runs_root_path, dirname)):
+                potential_run_dirs.append(dirname)
+        
+        if not potential_run_dirs:
+            print(f"Error: No timestamped run directories found in '{runs_root_path}'.")
+            print("Please run train_crossval.py first or specify testing.cvpath.")
+            return
+            
+        # Sort directories chronologically (lexicographical sort works for YYYY-MM-DD-HH-MM-SS)
+        potential_run_dirs.sort(reverse=True)
+        latest_run_name = potential_run_dirs[0]
+        experiment_root = os.path.join(runs_root_path, latest_run_name)
+        print(f"Found latest training run at: {experiment_root}")
+    else:
+        # Use the user-specified path
+        experiment_root = hyu.to_absolute_path(cfg.testing.cvpath)
+
     # The download logic might need to be conditional based on whether experiment_root exists
     # or if a specific "download_if_missing" flag is set in config.
-    if not os.path.isdir(experiment_root) and cfg.testing.get("download_sample_run_if_missing", False): # Make download conditional
-        print(f'Trained model directory not found at {experiment_root}. Downloading sample run...')
-        download_extract_zip(
-            url=cfg.testing.get("sample_run_url", 'https://cloud.technikum-wien.at/s/PiHsFtnB69cqxPE/download/sample-run.zip'), # Make URL configurable
-            file_path=experiment_root + '.zip', # This assumes cvpath is a dir name, not a zip file path
-        )
-    elif not os.path.isdir(experiment_root):
-        print(f"Error: Trained model directory not found at {experiment_root}")
-        print("Please specify a valid 'testing.cvpath' in your Hydra configuration or override it.")
-        print("Example: python test_crossval.py testing.cvpath=/path/to/your/training_output_folder")
-        return # Exit if path is invalid and not downloading
+    # This download logic is likely for a sample run if no local training output is found/specified.
+    # It should only trigger if experiment_root (after potential 'latest' resolution) doesn't exist.
+    if not os.path.isdir(experiment_root):
+        if cfg.testing.get("download_sample_run_if_missing", False):
+            print(f'Trained model directory not found at {experiment_root}. Downloading sample run...')
+            # Ensure parent directory for experiment_root exists if it's a new dir for download
+            os.makedirs(os.path.dirname(experiment_root) if os.path.dirname(experiment_root) else ".", exist_ok=True)
+            download_extract_zip(
+                url=cfg.testing.get("sample_run_url", 'https://cloud.technikum-wien.at/s/PiHsFtnB69cqxPE/download/sample-run.zip'),
+                file_path=experiment_root + '.zip', # This assumes cvpath was a dir name, and we append .zip
+            )
+            # After download and extraction, experiment_root should now be a directory.
+            if not os.path.isdir(experiment_root):
+                 print(f"Error: Sample run downloaded but directory {experiment_root} not found post-extraction.")
+                 return
+        else:
+            print(f"Error: Trained model directory not found at {experiment_root}")
+            print("Please specify a valid 'testing.cvpath', ensure 'latest' can find a run, or enable 'testing.download_sample_run_if_missing'.")
+            return # Exit if path is invalid and not downloading
 
     # instantiate model
     print('*****')
