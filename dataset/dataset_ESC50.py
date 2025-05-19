@@ -4,6 +4,7 @@ import requests
 import logging
 from functools import partial
 import random
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -441,6 +442,55 @@ class ESC50(data.Dataset):
 
     def get_metadata(self, index):
         return self.metadata_dict[index]
+
+
+def init_preprocessing():
+    output_dir = "preprocessed_data"
+
+    # Delete folder if it exists
+    if os.path.exists(output_dir):
+        print(f"Deleting existing folder: {output_dir}")
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+
+
+class InMemoryESC50(ESC50):
+    def __init__(self, root, test_folds=frozenset((1,)), subset="train", global_mean_std=(0.0, 1.0), download=False, sr=None, n_mels=None, hop_length=None, num_aug=False, prob_aug_wave=0, prob_aug_spec=0, val_size=None, n_mfcc=None, use_preprocessed_data=False, preprocessed_data_root=None):
+        super().__init__(root=root,
+                 test_folds=test_folds,
+                 subset=subset,
+                 global_mean_std=global_mean_std,
+                 download=download,
+                 sr=sr, n_mels=n_mels, hop_length=hop_length, # Pass sr, n_mels, hop_length
+                 num_aug=num_aug, prob_aug_wave=prob_aug_wave, prob_aug_spec=prob_aug_spec, # Pass augmentation params
+                 val_size=val_size, n_mfcc=n_mfcc, # Pass val_size and n_mfcc
+                 use_preprocessed_data=use_preprocessed_data, preprocessed_data_root=preprocessed_data_root) # Pass preprocessing params
+                 
+        # Make safe folder name based on fold
+        fold_str = "_".join(str(f) for f in sorted(test_folds))
+        output_dir = f"preprocessed_data/fold_{fold_str}_{subset}"
+        folder_exists = os.path.exists(output_dir)
+
+        if not folder_exists:
+            os.makedirs(output_dir, exist_ok=True)       
+            print(f"Preprocessing {super().__len__()} samples to: {output_dir}")
+            for i in tqdm(range(super().__len__())):
+                fname, feat, label = super().__getitem__(i)
+                out_path = os.path.join(output_dir, fname.replace('.wav', '.pt'))
+                torch.save({'features': feat, 'label': label}, out_path)
+        
+        self.data = []
+        self.files = sorted([f for f in os.listdir(output_dir) if f.endswith('.pt')])
+        for f in tqdm(self.files, desc="Loading into RAM"):
+            data = torch.load(os.path.join(output_dir, f))
+            self.data.append((f, data['features'], data['label']))
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
 
 def get_global_stats(data_path):
     """

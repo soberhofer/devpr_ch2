@@ -25,7 +25,7 @@ from models.mobilenetv2 import MobileNetV2Audio # Import V2 from its new file
 from models.resnet import ResNet50, ResNet18 # Import ResNet50 and ResNet18
 from models.romnet import Romnet # Import Romnet
 from models.utils import EarlyStopping, Tee
-from dataset.dataset_ESC50 import ESC50
+from dataset.dataset_ESC50 import ESC50, InMemoryESC50 # Import InMemoryESC50
 # import config # Removed old config import
 
 
@@ -294,8 +294,8 @@ def main(cfg: DictConfig):
 
             # --- Data Loading ---
             # Use absolute data path and cfg for parameters
-            # Pass required parameters from cfg to ESC50 constructor via partial
-            get_fold_dataset = partial(ESC50,
+            # Pass required parameters from cfg to InMemoryESC50 constructor via partial
+            get_fold_dataset = partial(InMemoryESC50, # Changed to InMemoryESC50
                                        root=data_path, # Original data path, used for download if needed
                                        sr=cfg.data.sr,
                                        n_mels=cfg.data.n_mels,
