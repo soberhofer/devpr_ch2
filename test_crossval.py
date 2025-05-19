@@ -13,7 +13,7 @@ from train_crossval import test, make_model, global_stats
 # import config # Removed config import
 
 
-@hydra.main(config_path="../conf", config_name="config", version_base=None)
+@hydra.main(config_path="conf", config_name="config", version_base=None) # Corrected config_path
 def main(cfg: DictConfig):
     # Print the configuration - useful for debugging
     print(OmegaConf.to_yaml(cfg))
