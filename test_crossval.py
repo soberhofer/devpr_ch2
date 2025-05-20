@@ -9,6 +9,7 @@ import datetime as dt # For robust date parsing if needed, though string sort mi
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import hydra.utils as hyu
+from functools import partial
 
 from dataset.dataset_ESC50 import ESC50, InMemoryESC50, download_extract_zip
 from train_crossval import test, make_model, global_stats
