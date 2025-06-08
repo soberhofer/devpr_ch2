@@ -559,25 +559,20 @@ def calculate_fold_descriptive_stats(cfg, data_path, train_folds_for_stats, all_
     
     # Determine the 'test' folds for this specific stats calculation run.
     # These are folds NOT in train_folds_for_stats.
+    # For example, if all_dataset_folds = {1,2,3,4,5} and train_folds_for_stats = {1,2,3,4},
+    # then stats_calc_test_folds will be {5}.
+    # The ESC50 class will then correctly use folds {1,2,3,4} as its training set.
     stats_calc_test_folds = all_dataset_folds - train_folds_for_stats
-    if not stats_calc_test_folds:
-        # This case should ideally not happen if train_folds_for_stats is a subset of all_dataset_folds
-        # For safety, if train_folds_for_stats includes all folds, pick one as a dummy test_fold.
-        # Or, adjust ESC50 to handle an empty test_folds set if subset='train' is to include all data.
-        # For now, let's assume train_folds_for_stats will not be all_dataset_folds.
-        # A simple approach: if train_folds_for_stats is {1,2,3,4} and all_dataset_folds is {1,2,3,4,5},
-        # then stats_calc_test_folds will be {5}.
-        # The ESC50 class uses test_folds to define what's *not* in the train/val set.
-        # So, if we want stats from folds {1,2,3,4}, we tell ESC50 that fold {5} is the test_fold.
-        if not all_dataset_folds: # Should not happen with ESC50
-             raise ValueError("all_dataset_folds cannot be empty for stats calculation.")
-        # Pick an arbitrary fold from all_dataset_folds that is NOT in train_folds_for_stats
-        # If train_folds_for_stats covers all_dataset_folds, this logic needs adjustment.
-        # However, standard cross-validation implies train_folds_for_stats is a proper subset.
-        if not stats_calc_test_folds and len(all_dataset_flags) > 0: # if train_folds_for_stats == all_dataset_folds
-            stats_calc_test_folds = {list(all_dataset_folds)[0]} # Make one up, though this scenario is odd for cross-val stats
-            print(f"Warning: train_folds_for_stats seems to cover all_dataset_folds. Using {stats_calc_test_folds} as dummy test_fold for stats.")
-
+    
+    if not stats_calc_test_folds and train_folds_for_stats == all_dataset_folds:
+        # This edge case means we want stats from ALL folds.
+        # To make ESC50 use all folds for its 'train' subset, test_folds should be empty.
+        # However, this scenario is not typical for cross-validation stats.
+        # The current logic in train_crossval.py ensures train_folds_for_stats is "all_available_folds - {test_fold}",
+        # so stats_calc_test_folds will always be non-empty (equal to {test_fold}).
+        # Thus, this specific conditional block might be redundant for the current use case.
+        print(f"Warning: Calculating stats over all available folds: {train_folds_for_stats}. This might not be standard for fold-specific normalization.")
+        # stats_calc_test_folds remains empty in this specific sub-condition.
 
     # Instantiate ESC50 for the 'train' subset of the specified train_folds_for_stats.
     # Crucially, disable normalization (global_mean_std=None) and all augmentations
@@ -591,7 +586,7 @@ def calculate_fold_descriptive_stats(cfg, data_path, train_folds_for_stats, all_
         test_folds=stats_calc_test_folds, # Folds *not* in train_folds_for_stats
         subset="train",                   # We want the training part of the remaining folds
         global_mean_std=None,             # No normalization during stats calculation
-        download=cfg.data.get('download', False), # Allow download if not present
+        download=cfg.data.get('download', True), # Ensure download is attempted if data not present
         num_aug=0,                        # No numerical augmentation
         prob_aug_wave=0,                  # No wave augmentation
         prob_aug_spec=0,                  # No spec augmentation
