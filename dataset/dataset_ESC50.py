@@ -600,26 +600,37 @@ def calculate_fold_descriptive_stats(cfg, data_path, train_folds_for_stats, all_
     if len(stats_dataset) == 0:
         raise ValueError(f"Stats dataset for folds {train_folds_for_stats} is empty. Check fold configuration.")
 
-    # Iterate and collect all features
-    all_features = []
-    # Using a simple loop; DataLoader could be used but might be overkill here.
-    for i in tqdm(range(len(stats_dataset)), desc=f"Extracting features for stats (folds {train_folds_for_stats})"):
-        _, feat, _ = stats_dataset[i] # __getitem__ will return unnormalized features
-        all_features.append(feat)
-    
-    if not all_features:
-        return 0.0, 1.0 # Default if no features found, though an error might be better
+    # Iteratively calculate mean and std to save memory
+    count = 0
+    sum_val = 0.0
+    sum_sq_val = 0.0
 
-    # Concatenate all features into a single tensor/array
-    # Assuming features are torch tensors
-    if isinstance(all_features[0], torch.Tensor):
-        all_features_tensor = torch.stack(all_features)
-        mean_val = all_features_tensor.mean().item()
-        std_val = all_features_tensor.std().item()
-    else: # Assuming numpy arrays if not tensors
-        all_features_array = np.array(all_features)
-        mean_val = all_features_array.mean()
-        std_val = all_features_array.std()
+    for i in tqdm(range(len(stats_dataset)), desc=f"Calculating stats for folds {train_folds_for_stats}"):
+        _, feat, _ = stats_dataset[i]  # __getitem__ will return unnormalized features
+        
+        # Ensure feat is a float tensor for calculations
+        if not isinstance(feat, torch.Tensor):
+            feat = torch.tensor(feat) # Convert if it's numpy or other list-like
+        feat = feat.float()
+        
+        sum_val += torch.sum(feat).item()
+        sum_sq_val += torch.sum(feat.pow(2)).item() # Use pow(2) for squaring
+        count += feat.numel()  # Total number of elements in the tensor
+
+    if count == 0:
+        print(f"Warning: No data found for stats calculation in folds {train_folds_for_stats}. Returning default mean=0, std=1.")
+        return 0.0, 1.0
+
+    mean_val = sum_val / count
+    # Variance = E[X^2] - (E[X])^2
+    variance = (sum_sq_val / count) - (mean_val**2)
+    
+    # Clamp variance to be non-negative to avoid issues with sqrt of small negative numbers due to precision
+    if variance < 0:
+        # print(f"Warning: Calculated negative variance ({variance}) for folds {train_folds_for_stats}. Clamping to 0.")
+        variance = 0.0
+        
+    std_val = np.sqrt(variance) # Using np.sqrt as variance is now a float
     
     print(f"Calculated stats for folds {train_folds_for_stats}: Mean={mean_val:.4f}, Std={std_val:.4f}")
     return mean_val, std_val
