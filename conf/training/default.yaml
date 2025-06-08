@@ -3,25 +3,25 @@
 
 # Data splitting and loading
 val_size: 0.2
-batch_size: 128
-num_workers: 2 # Adjusted for Colab/general use, was 6/16 in original comments
+batch_size: 32
+num_workers: 4 # Adjusted for Colab/general use, was 6/16 in original comments
 persistent_workers: true # Was false in original comments
 
 # Training loop
-epochs: 150
-patience: 20 # Early stopping patience
-label_smoothing: 0.1 # Label smoothing factor for CrossEntropyLoss (0.0 = disabled)
+epochs: 50
+patience: 30 # Early stopping patience
+label_smoothing: 0 # Label smoothing factor for CrossEntropyLoss (0.0 = disabled)
 
 # Optimizer settings
 optimizer: AdamW # Options: Adam, AdamW, SGD
 lr: 0.001
-weight_decay: 1e-3
+weight_decay: 0
 
 # Scheduler settings
 scheduler:
   # --- Common ---
-  type: StepLR # Options: StepLR, CyclicLR, OneCycleLR, CosineAnnealingLR
-  verbose: true
+  type: CosineAnnealingLR # Options: StepLR, CyclicLR, OneCycleLR, CosineAnnealingLR
+  #verbose: true
 
   # --- StepLR specific ---
   step_size: 5 # For StepLR: Period of learning rate decay.

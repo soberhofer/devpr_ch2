@@ -1,6 +1,6 @@
 # Default configuration for testing
 
-cvpath: "latest" # Special value: "latest" to find the most recent run in cfg.runs_path, or provide a specific path.
+cvpath: "." # Special value: "latest" to find the most recent run in cfg.runs_path, or provide a specific path.
 # Example specific path: "results/2023-10-27-12-34-56" (relative to Repo/ if running from Repo/)
 # The script will look for fold subdirectories (1, 2, 3, etc.) inside this path.
 

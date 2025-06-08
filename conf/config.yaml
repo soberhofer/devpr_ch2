@@ -7,7 +7,7 @@ defaults:
   - _self_           # Allows overriding defaults from this file or command line
 
 # WandB configuration
-use_wandb: false      # Set to true to enable WandB logging
+use_wandb: true      # Set to true to enable WandB logging
 wandb_project: "challenge2" # Default WandB project name (can be overridden)
 comment: ""           # Optional comment to append to run name
 
