@@ -25,17 +25,9 @@ from models.mobilenetv2 import MobileNetV2Audio # Import V2 from its new file
 from models.resnet import ResNet50, ResNet18 # Import ResNet50 and ResNet18
 from models.romnet import Romnet # Import Romnet
 from models.utils import EarlyStopping, Tee
-from dataset.dataset_ESC50 import ESC50, InMemoryESC50 # Import InMemoryESC50
+from dataset.dataset_ESC50 import ESC50, InMemoryESC50, calculate_fold_descriptive_stats # Import InMemoryESC50 and new stats function
 # import config # Removed old config import
 
-
-
-# mean and std of train data for every fold
-global_stats = np.array([[-54.364834, 20.853344],
-                         [-54.279022, 20.847532],
-                         [-54.18343, 20.80387],
-                         [-54.223698, 20.798292],
-                         [-54.200905, 20.949806]])
 
 # evaluate model on different testing data 'dataloader'
 # Added cfg parameter
@@ -261,7 +253,8 @@ def main(cfg: DictConfig):
 
     # --- Cross-validation Loop ---
     scores = {}
-    print("WARNING: Using hardcoded global mean and std. Depends on feature settings!") # Keep warning for now
+    # Use cfg.data.folds (which is 5 in esc50.yaml) instead of cfg.data.num_folds
+    all_available_folds = set(range(1, cfg.data.folds + 1)) 
 
     # Iterate through test folds defined in the config
     for test_fold in cfg.data.test_folds:
@@ -321,14 +314,30 @@ def main(cfg: DictConfig):
                                        test_folds={test_fold},
                                        prob_aug_wave=cfg.data.get('prob_aug_wave', 0.0),
                                        prob_aug_spec=cfg.data.get('prob_aug_spec', 0.0),
-                                       global_mean_std=global_stats[test_fold - 1], # Still using hardcoded stats
-                                       num_aug=cfg.data.num_aug, # Pass num_aug, used by both if applicable
+                                       # global_mean_std will be set based on dataset_class_to_use
+                                       num_aug=cfg.data.num_aug, # Pass num_aug
                                        # Conditional parameters for standard ESC50's external preprocessing
                                        use_preprocessed_data=cfg.data.get('use_preprocessed_data', False) if dataset_class_to_use == ESC50 else False,
                                        preprocessed_data_root=hyu.to_absolute_path(cfg.data.preprocessed_data_path) if dataset_class_to_use == ESC50 and cfg.data.get('use_preprocessed_data', False) and cfg.data.get('preprocessed_data_path') else None
                                        )
+            
+            # Determine current training folds for stats calculation
+            current_train_folds_for_stats = all_available_folds - {test_fold}
+            
+            # Calculate or load stats for the current training folds
+            # Note: Add caching mechanism here if desired for performance
+            fold_mean, fold_std = calculate_fold_descriptive_stats(cfg, data_path, current_train_folds_for_stats, all_available_folds)
+            current_fold_global_mean_std = (fold_mean, fold_std)
 
-            train_set = get_fold_dataset(subset="train") # num_aug is now part of partial
+            # Update the partial function with the dynamically calculated stats
+            if dataset_class_to_use == InMemoryESC50:
+                # InMemoryESC50 expects global_mean_std_for_norm for applying normalization after loading from cache
+                get_fold_dataset = partial(get_fold_dataset.func, **get_fold_dataset.keywords, global_mean_std_for_norm=current_fold_global_mean_std)
+            else: # For standard ESC50
+                get_fold_dataset = partial(get_fold_dataset.func, **get_fold_dataset.keywords, global_mean_std=current_fold_global_mean_std)
+
+
+            train_set = get_fold_dataset(subset="train")
             print('*****')
             print(f'Train folds: {train_set.train_folds}, Test fold: {train_set.test_folds}')
             # print('random wave cropping') # Assuming this happens inside ESC50 dataset

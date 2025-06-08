@@ -126,10 +126,10 @@ class ESC50(data.Dataset):
         List of wave transformations to apply to the audio data.
     spec_transforms : torchvision.transforms.Compose
         List of spectral transformations to apply to the spectrogram.
-    global_mean : float
-        Global mean used for normalization of features.
-    global_std : float
-        Global standard deviation used for normalization of features.
+    global_mean : float or None
+        Global mean used for normalization of features. If None, no normalization is applied.
+    global_std : float or None
+        Global standard deviation used for normalization of features. If None, no normalization is applied.
     n_mfcc : int or None
         Number of MFCC features to extract. If None, mel spectrogram is used.
     sr : int
@@ -147,10 +147,12 @@ class ESC50(data.Dataset):
     """
     def __init__(self, root, sr, n_mels, hop_length,
                  test_folds=frozenset((1,)), subset="train",
-                 global_mean_std=(0.5, 0.5), download=False,
+                 global_mean_std=None, download=False,
                  num_aug=False, prob_aug_wave=0, prob_aug_spec=0,
                  val_size=None, n_mfcc=None,
-                 use_preprocessed_data=False, preprocessed_data_root=None):
+                 use_preprocessed_data=False, preprocessed_data_root=None,
+                 # Parameter to control if this instance is for stats calculation
+                 for_stats_calculation=False):
         """
         Initializes the ESC50 dataset, including setting paths, subsets, and transformations.
 
@@ -169,7 +171,7 @@ class ESC50(data.Dataset):
         subset : str, optional
             Subset of the dataset to load ('train', 'test', or 'val').
         global_mean_std : tuple, optional
-            Tuple containing global mean and global standard deviation for normalization (default is (0.0, 0.0)).
+            Tuple containing global mean and global standard deviation for normalization. If None, no normalization is applied.
         download : bool, optional
             If True, will download and extract the ESC-50 dataset if it's not already present (default is False).
         num_aug : bool, optional
@@ -194,6 +196,7 @@ class ESC50(data.Dataset):
         self.n_mfcc = n_mfcc # This will be used directly later
         self.use_preprocessed_data = use_preprocessed_data
         self.preprocessed_data_root = preprocessed_data_root
+        self.for_stats_calculation = for_stats_calculation
 
         audio_folder_name = 'ESC-50-master/audio'
         # If using preprocessed data, the root path might be different
@@ -259,8 +262,11 @@ class ESC50(data.Dataset):
                 self.file_names = [(f, 0) for f in val_files]
         # the number of samples in the wave (=length) required for spectrogram
         out_len = int(((self.sr * 5) // self.hop_length) * self.hop_length) # Changed config.sr and config.hop_length
-        train = self.subset == "train"
-        if train:
+        
+        # If this instance is for stats calculation, disable augmentations and random transforms
+        is_train_or_val_for_runtime = self.subset in ["train", "val"] and not self.for_stats_calculation
+
+        if is_train_or_val_for_runtime:
             # augment training data with transformations that include randomness
             # transforms can be applied on wave and spectral representation
             self.wave_transforms = transforms.Compose(
@@ -277,38 +283,35 @@ class ESC50(data.Dataset):
             )
 
             self.spec_transforms = transforms.Compose(
-                # to Tensor and prepend singleton dim
-                #lambda x: torch.Tensor(x).unsqueeze(0),
-                # lambda non-pickleable, problem on windows, replace with partial function
                 torch.Tensor,
                 partial(torch.unsqueeze, dim=0),
             )
 
             self.spec_transforms_add = transforms.Compose(
-                # to Tensor and prepend singleton dim
-                # lambda x: torch.Tensor(x).unsqueeze(0),
-                # lambda non-pickleable, problem on windows, replace with partial function
                 torch.Tensor,
                 FrequencyMasking(freq_mask_param=15),
                 TimeMasking(time_mask_param=30),
                 partial(torch.unsqueeze, dim=0),
             )
-
-        else:
-            # for testing transforms are applied deterministically to support reproducible scores
+        else: # For test set or for stats calculation
+            # for testing or stats_calculation, transforms are applied deterministically
             self.wave_transforms = transforms.Compose(
                 torch.Tensor,
-                # disable randomness
-                transforms.RandomPadding(out_len=out_len, train=False),
-                transforms.RandomCrop(out_len=out_len, train=False)
+                transforms.RandomPadding(out_len=out_len, train=False), # Ensure train=False
+                transforms.RandomCrop(out_len=out_len, train=False)    # Ensure train=False
             )
-
             self.spec_transforms = transforms.Compose(
                 torch.Tensor,
                 partial(torch.unsqueeze, dim=0),
             )
-        self.global_mean = global_mean_std[0]
-        self.global_std = global_mean_std[1]
+
+        if global_mean_std:
+            self.global_mean = global_mean_std[0]
+            self.global_std = global_mean_std[1]
+        else:
+            self.global_mean = None
+            self.global_std = None
+        
         # self.n_mfcc is already set in __init__
 
         # Load Metadata
@@ -388,14 +391,17 @@ class ESC50(data.Dataset):
             wave = wave[:, start: end + 1]
 
             wave_copy = np.copy(wave)
-            if self.subset == 'train':
+            
+            # Apply augmentations only if not for stats calculation and in train subset
+            if self.subset == 'train' and not self.for_stats_calculation:
                 bool_aug_wave = random.random() < self.prob_aug_wave
                 if bool_aug_wave:
                     wave_copy = self.wave_transforms_add(wave_copy)
                 else:
                     wave_copy = self.wave_transforms(wave_copy)
-            else:
+            else: # For test, val, or stats calculation, use deterministic transforms
                 wave_copy = self.wave_transforms(wave_copy)
+
             wave_copy.squeeze_(0)
             self.cachedata[index] = wave_copy
         else:
@@ -403,39 +409,33 @@ class ESC50(data.Dataset):
 
         if self.n_mfcc:
             mfcc = librosa.feature.mfcc(y=wave_copy.numpy(),
-                                        sr=self.sr, # Changed config.sr to self.sr
-                                        n_mels=self.n_mels, # Changed config.n_mels to self.n_mels
+                                        sr=self.sr, 
+                                        n_mels=self.n_mels, 
                                         n_fft=1024,
-                                        hop_length=self.hop_length, # Changed config.hop_length to self.hop_length
+                                        hop_length=self.hop_length, 
                                         n_mfcc=self.n_mfcc)
             feat = mfcc
         else:
-            # melspectrogram benötigt viel CPU Leistung
             s = librosa.feature.melspectrogram(y=wave_copy.numpy(),
-                                               sr=self.sr, # Changed config.sr to self.sr
-                                               n_mels=self.n_mels,    # --> Number of rows # Changed config.n_mels to self.n_mels
+                                               sr=self.sr, 
+                                               n_mels=self.n_mels,    
                                                n_fft=1024,
-                                               hop_length=self.hop_length, # Changed config.hop_length to self.hop_length
-                                               #center=False,
+                                               hop_length=self.hop_length,
                                                )
-            # s.size:
-            # number of rows = n_mels
-            # number of columns = sr*5/hop_length
-            log_s = librosa.power_to_db(s, ref=np.max)  # 10*log10(s/reg) --> Transform from linear Spectrum to dB
+            log_s = librosa.power_to_db(s, ref=np.max)
 
-            # masking the spectrograms --> not correct --> Transform to Tensor + Create new Channel
-            if self.subset == 'train':
+            if self.subset == 'train' and not self.for_stats_calculation:
                 bool_aug_spec = random.random() < self.prob_aug_spec
                 if bool_aug_spec:
                     log_s = self.spec_transforms_add(log_s)
                 else:
                     log_s = self.spec_transforms(log_s)
-            else:
+            else: # For test, val, or stats calculation
                 log_s = self.spec_transforms(log_s)
             feat = log_s
 
-        # normalize
-        if self.global_mean:
+        # normalize only if global_mean is available (i.e., not None)
+        if self.global_mean is not None and self.global_std is not None:
             feat = (feat - self.global_mean) / self.global_std
 
         return file_name, feat, class_id
@@ -455,44 +455,182 @@ def init_preprocessing():
 
 
 class InMemoryESC50(ESC50):
-    def __init__(self, root, test_folds=frozenset((1,)), subset="train", global_mean_std=(0.0, 1.0), download=False, sr=None, n_mels=None, hop_length=None, num_aug=False, prob_aug_wave=0, prob_aug_spec=0, val_size=None, n_mfcc=None, use_preprocessed_data=False, preprocessed_data_root=None):
+    def __init__(self, root, test_folds=frozenset((1,)), subset="train", 
+                 global_mean_std_for_norm=None, # Renamed for clarity, used for normalization AFTER loading
+                 download=False, sr=None, n_mels=None, hop_length=None, 
+                 num_aug=False, prob_aug_wave=0, prob_aug_spec=0, 
+                 val_size=None, n_mfcc=None, 
+                 use_preprocessed_data=False, preprocessed_data_root=None):
+        
+        # Initialize the base class to PRELOAD data WITHOUT normalization or runtime augmentations
+        # The base class will handle file listing, basic transforms (padding/cropping for consistent size)
+        # but will not apply normalization or prob_aug during this preloading phase.
+        # The `global_mean_std=None` ensures features are cached raw.
+        # `for_stats_calculation=True` can also be used if we want to ensure no augs from base.
         super().__init__(root=root,
-                 test_folds=test_folds,
-                 subset=subset,
-                 global_mean_std=global_mean_std,
-                 download=download,
-                 sr=sr, n_mels=n_mels, hop_length=hop_length, # Pass sr, n_mels, hop_length
-                 num_aug=num_aug, prob_aug_wave=prob_aug_wave, prob_aug_spec=prob_aug_spec, # Pass augmentation params
-                 val_size=val_size, n_mfcc=n_mfcc, # Pass val_size and n_mfcc
-                 use_preprocessed_data=use_preprocessed_data, preprocessed_data_root=preprocessed_data_root) # Pass preprocessing params
-                 
-        # Make safe folder name based on fold
-        fold_str = "_".join(str(f) for f in sorted(test_folds))
-        output_dir = f"preprocessed_data/fold_{fold_str}_{subset}"
+                         test_folds=test_folds,
+                         subset=subset,
+                         global_mean_std=None, # IMPORTANT: Cache raw features
+                         download=download,
+                         sr=sr, n_mels=n_mels, hop_length=hop_length,
+                         num_aug=0, prob_aug_wave=0, prob_aug_spec=0, # Disable augs for caching
+                         val_size=val_size, n_mfcc=n_mfcc,
+                         use_preprocessed_data=use_preprocessed_data, 
+                         preprocessed_data_root=preprocessed_data_root,
+                         for_stats_calculation=True) # Treat preloading like stats calculation (no augs)
+        
+        if global_mean_std_for_norm:
+            self.norm_mean = global_mean_std_for_norm[0]
+            self.norm_std = global_mean_std_for_norm[1]
+        else:
+            self.norm_mean = None
+            self.norm_std = None
+
+        # Make safe folder name based on fold and subset
+        # This folder stores pre-processed (but unnormalized) features
+        fold_str = "_".join(str(f) for f in sorted(list(test_folds))) # Ensure test_folds is iterable for sorting
+        # Include feature params in cache path to avoid conflicts if they change
+        feature_signature = f"sr{sr}_mels{n_mels}_hop{hop_length}_mfcc{n_mfcc if n_mfcc else 'spec'}"
+        output_dir_base = "preprocessed_data_cache" # Main cache directory
+        output_dir = os.path.join(output_dir_base, f"fold_{fold_str}_{subset}_{feature_signature}")
+
         folder_exists = os.path.exists(output_dir)
 
         if not folder_exists:
-            os.makedirs(output_dir, exist_ok=True)       
-            print(f"Preprocessing {super().__len__()} samples to: {output_dir}")
+            os.makedirs(output_dir, exist_ok=True)
+            print(f"Preprocessing and caching {super().__len__()} samples to: {output_dir}")
+            # Use the __getitem__ from the base class (ESC50) which now returns raw features
+            # because global_mean_std was None and for_stats_calculation=True during super().__init__
             for i in tqdm(range(super().__len__())):
-                fname, feat, label = super().__getitem__(i)
+                fname, feat, label = super().__getitem__(i) # Gets raw, deterministically transformed features
                 out_path = os.path.join(output_dir, fname.replace('.wav', '.pt'))
                 torch.save({'features': feat, 'label': label}, out_path)
         
-        self.data = []
-        self.files = sorted([f for f in os.listdir(output_dir) if f.endswith('.pt')])
-        for f in tqdm(self.files, desc="Loading into RAM"):
-            data = torch.load(os.path.join(output_dir, f))
-            self.data.append((f, data['features'], data['label']))
+        self.data_from_cache = []
+        self.files_in_cache = sorted([f for f in os.listdir(output_dir) if f.endswith('.pt')])
+        for f_name in tqdm(self.files_in_cache, desc=f"Loading {subset} fold {fold_str} from cache into RAM"):
+            loaded_data = torch.load(os.path.join(output_dir, f_name))
+            self.data_from_cache.append((f_name, loaded_data['features'], loaded_data['label']))
 
     def __len__(self):
-        return len(self.data)
+        return len(self.data_from_cache)
 
     def __getitem__(self, idx):
-        return self.data[idx]
+        fname, feat, label = self.data_from_cache[idx]
+        
+        # Apply normalization if mean and std are provided for this InMemory instance
+        if self.norm_mean is not None and self.norm_std is not None:
+            feat = (feat - self.norm_mean) / self.norm_std
+            
+        # Note: Runtime augmentations (prob_aug_wave, prob_aug_spec) from the original ESC50
+        # are NOT applied here because InMemoryESC50 is designed to serve pre-cached, fixed features.
+        # If runtime augmentation on cached data is desired, it would need to be added here.
+        # However, the current structure suggests num_aug in ESC50 handles augmentation by creating
+        # multiple versions of files, which would be cached if num_aug > 0 during InMemoryESC50's super().__init__.
+        # The current changes aim to keep InMemoryESC50 serving features consistently post-caching.
+
+        return fname, feat, label
 
 
-def get_global_stats(data_path):
+def calculate_fold_descriptive_stats(cfg, data_path, train_folds_for_stats, all_dataset_folds):
+    """
+    Calculates the global mean and standard deviation of features for a specific set of training folds.
+
+    Parameters:
+    -----------
+    cfg : DictConfig
+        Hydra configuration object containing data and feature parameters.
+    data_path : str
+        Path to the directory where the ESC50 dataset is stored.
+    train_folds_for_stats : set
+        A set of fold numbers (e.g., {1, 2, 3, 4}) to be used for calculating statistics.
+        These are the folds that constitute the training set for a given test fold.
+    all_dataset_folds : set
+        A set of all available fold numbers in the dataset (e.g., {1, 2, 3, 4, 5}).
+        Used to determine which folds are *not* part of train_folds_for_stats, effectively
+        making them the 'test' folds from the perspective of this stats calculation dataset.
+
+    Returns:
+    --------
+    tuple
+        A tuple containing (mean, std) of the features for the specified training folds.
+    """
+    print(f"Calculating descriptive stats for training folds: {train_folds_for_stats}")
+    
+    # Determine the 'test' folds for this specific stats calculation run.
+    # These are folds NOT in train_folds_for_stats.
+    stats_calc_test_folds = all_dataset_folds - train_folds_for_stats
+    if not stats_calc_test_folds:
+        # This case should ideally not happen if train_folds_for_stats is a subset of all_dataset_folds
+        # For safety, if train_folds_for_stats includes all folds, pick one as a dummy test_fold.
+        # Or, adjust ESC50 to handle an empty test_folds set if subset='train' is to include all data.
+        # For now, let's assume train_folds_for_stats will not be all_dataset_folds.
+        # A simple approach: if train_folds_for_stats is {1,2,3,4} and all_dataset_folds is {1,2,3,4,5},
+        # then stats_calc_test_folds will be {5}.
+        # The ESC50 class uses test_folds to define what's *not* in the train/val set.
+        # So, if we want stats from folds {1,2,3,4}, we tell ESC50 that fold {5} is the test_fold.
+        if not all_dataset_folds: # Should not happen with ESC50
+             raise ValueError("all_dataset_folds cannot be empty for stats calculation.")
+        # Pick an arbitrary fold from all_dataset_folds that is NOT in train_folds_for_stats
+        # If train_folds_for_stats covers all_dataset_folds, this logic needs adjustment.
+        # However, standard cross-validation implies train_folds_for_stats is a proper subset.
+        if not stats_calc_test_folds and len(all_dataset_flags) > 0: # if train_folds_for_stats == all_dataset_folds
+            stats_calc_test_folds = {list(all_dataset_folds)[0]} # Make one up, though this scenario is odd for cross-val stats
+            print(f"Warning: train_folds_for_stats seems to cover all_dataset_folds. Using {stats_calc_test_folds} as dummy test_fold for stats.")
+
+
+    # Instantiate ESC50 for the 'train' subset of the specified train_folds_for_stats.
+    # Crucially, disable normalization (global_mean_std=None) and all augmentations
+    # (num_aug=0, prob_aug_wave=0, prob_aug_spec=0) and set for_stats_calculation=True.
+    # val_size should also be None or 0 to use all data from train_folds_for_stats.
+    stats_dataset = ESC50(
+        root=data_path,
+        sr=cfg.data.sr,
+        n_mels=cfg.data.n_mels,
+        hop_length=cfg.data.hop_length,
+        test_folds=stats_calc_test_folds, # Folds *not* in train_folds_for_stats
+        subset="train",                   # We want the training part of the remaining folds
+        global_mean_std=None,             # No normalization during stats calculation
+        download=cfg.data.get('download', False), # Allow download if not present
+        num_aug=0,                        # No numerical augmentation
+        prob_aug_wave=0,                  # No wave augmentation
+        prob_aug_spec=0,                  # No spec augmentation
+        val_size=None,                    # Use all data from the selected train folds for stats
+        n_mfcc=cfg.data.get('n_mfcc', None),
+        use_preprocessed_data=False,      # Calculate from raw audio for stats
+        preprocessed_data_root=None,
+        for_stats_calculation=True        # Explicit flag
+    )
+
+    if len(stats_dataset) == 0:
+        raise ValueError(f"Stats dataset for folds {train_folds_for_stats} is empty. Check fold configuration.")
+
+    # Iterate and collect all features
+    all_features = []
+    # Using a simple loop; DataLoader could be used but might be overkill here.
+    for i in tqdm(range(len(stats_dataset)), desc=f"Extracting features for stats (folds {train_folds_for_stats})"):
+        _, feat, _ = stats_dataset[i] # __getitem__ will return unnormalized features
+        all_features.append(feat)
+    
+    if not all_features:
+        return 0.0, 1.0 # Default if no features found, though an error might be better
+
+    # Concatenate all features into a single tensor/array
+    # Assuming features are torch tensors
+    if isinstance(all_features[0], torch.Tensor):
+        all_features_tensor = torch.stack(all_features)
+        mean_val = all_features_tensor.mean().item()
+        std_val = all_features_tensor.std().item()
+    else: # Assuming numpy arrays if not tensors
+        all_features_array = np.array(all_features)
+        mean_val = all_features_array.mean()
+        std_val = all_features_array.std()
+    
+    print(f"Calculated stats for folds {train_folds_for_stats}: Mean={mean_val:.4f}, Std={std_val:.4f}")
+    return mean_val, std_val
+
+
+def get_global_stats_old(data_path): # Renamed old function to avoid name clash
     """
     Calculate the global mean and standard deviation of features (e.g., MFCC or spectrogram)
     for the ESC50 dataset across multiple folds of the training data.
