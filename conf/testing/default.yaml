@@ -1,13 +1,13 @@
-# Repo/conf/testing/default.yaml
-# Default testing parameters
+# Default configuration for testing
 
-# Experiment to load checkpoints from
-# Note: This might be better handled dynamically or via command-line override
-experiment_dir: 'results/sample-run'
+cvpath: "." # Special value: "latest" to find the most recent run in cfg.runs_path, or provide a specific path.
+# Example specific path: "results/2023-10-27-12-34-56" (relative to Repo/ if running from Repo/)
+# The script will look for fold subdirectories (1, 2, 3, etc.) inside this path.
 
-# Checkpoints to load for testing within the experiment_dir
-checkpoints: ['terminal.pt'] # Was ['terminal.pt', 'best_val_loss.pt'] in original comments
+checkpoints:
+  - "best_val_loss.pt"
+  - "terminal.pt"
 
-# Batch size for testing (can be different from training)
-# If not specified, could potentially reuse training.batch_size
-# batch_size: 128 # Example if you want a specific test batch size
+batch_size: 64
+num_workers: 4
+device_id: 0 # GPU device ID, 0 for first GPU.

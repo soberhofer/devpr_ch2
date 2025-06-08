@@ -22,19 +22,12 @@ from models.model_classifier import AudioMLP, AudioCNN, TFCNN, TFCNN2
 from models.tfcnn import TFNet, Cnn
 from models.mobilenet import mobilenet_v3_large, mobilenet_v3_small # Keep V3 imports
 from models.mobilenetv2 import MobileNetV2Audio # Import V2 from its new file
-from models.resnet import ResNet50 # Import ResNet50
+from models.resnet import ResNet50, ResNet18 # Import ResNet50 and ResNet18
+from models.romnet import Romnet # Import Romnet
 from models.utils import EarlyStopping, Tee
-from dataset.dataset_ESC50 import ESC50
+from dataset.dataset_ESC50 import ESC50, InMemoryESC50, calculate_fold_descriptive_stats # Import InMemoryESC50 and new stats function
 # import config # Removed old config import
 
-
-
-# mean and std of train data for every fold
-global_stats = np.array([[-54.364834, 20.853344],
-                         [-54.279022, 20.847532],
-                         [-54.18343, 20.80387],
-                         [-54.223698, 20.798292],
-                         [-54.200905, 20.949806]])
 
 # evaluate model on different testing data 'dataloader'
 # Added cfg parameter
@@ -101,17 +94,17 @@ def train_epoch(cfg: DictConfig, model, train_loader, criterion, optimizer, devi
     return acc, losses
 
 
-# Added cfg, model, train_loader, val_loader, criterion, optimizer, scheduler, device, experiment_dir, float_fmt parameters
+# Added cfg, model, train_loader, val_loader, criterion, optimizer, scheduler, device, fold_output_dir, float_fmt parameters
 # Note: 'run' object is not passed here, we check cfg directly
-def fit_classifier(cfg: DictConfig, model, train_loader, val_loader, criterion, optimizer, scheduler, device, experiment_dir, float_fmt):
+def fit_classifier(cfg: DictConfig, model, train_loader, val_loader, criterion, optimizer, scheduler, device, fold_output_dir, float_fmt):
     num_epochs = cfg.training.epochs # Use cfg
 
-    # Use Hydra's current working directory for checkpoints
-    best_val_loss_path = os.path.join(experiment_dir, 'best_val_loss.pt')
-    terminal_path = os.path.join(experiment_dir, 'terminal.pt')
+    # Checkpoints are saved in the fold-specific output directory
+    best_val_loss_path = os.path.join(fold_output_dir, 'best_val_loss.pt')
+    terminal_path = os.path.join(fold_output_dir, 'terminal.pt')
 
     loss_stopping = EarlyStopping(patience=cfg.training.patience, delta=0.002, verbose=True, float_fmt=float_fmt, # Use cfg
-                                  checkpoint_file=best_val_loss_path) # Use updated path
+                                  checkpoint_file=best_val_loss_path)
 
     pbar = tqdm(range(1, 1 + num_epochs), ncols=50, unit='ep', file=sys.stdout, ascii=True)
     for epoch in (range(1, 1 + num_epochs)):
@@ -211,7 +204,18 @@ def make_model(cfg: DictConfig):
         # Instantiate ResNet50 using parameters from config
         # params.output_size (interpolated from data.n_classes) and params.channels are defined in conf/model/resnet50.yaml
         model = ResNet50(num_classes=params.output_size, # Changed from params.num_classes
-                         channels=params.get('channels', 1)) # Added .get() with default value 1
+                         channels=params.get('channels', 1), # Added .get() with default value 1
+                         dropout_prob=params.get('dropout_prob', 0.0))
+    elif model_type == 'ResNet18':
+        # Instantiate ResNet18 using parameters from config
+        model = ResNet18(num_classes=params.output_size,
+                         channels=params.get('channels', 1),
+                         dropout_prob=params.get('dropout_prob', 0.0))
+    elif model_type == 'Romnet':
+        # Instantiate Romnet using parameters from config
+        model = Romnet(num_classes=params.output_size,
+                       channels=params.get('channels', 1), # Default to 1 input channel
+                       dropout_prob=params.get('dropout_prob', 0.2)) # Default dropout_prob to 0.2
     else:
         raise ValueError(f"Invalid model type in config: {model_type}")
     return model
@@ -249,7 +253,8 @@ def main(cfg: DictConfig):
 
     # --- Cross-validation Loop ---
     scores = {}
-    print("WARNING: Using hardcoded global mean and std. Depends on feature settings!") # Keep warning for now
+    # Use cfg.data.folds (which is 5 in esc50.yaml) instead of cfg.data.num_folds
+    all_available_folds = set(range(1, cfg.data.folds + 1)) 
 
     # Iterate through test folds defined in the config
     for test_fold in cfg.data.test_folds:
@@ -262,8 +267,12 @@ def main(cfg: DictConfig):
         # For simplicity here, we'll use the Hydra CWD for each fold's run.
         # If running folds sequentially, Hydra creates a new dir each time.
         # If running in parallel (e.g., via sweep), Hydra handles subdirs.
-        current_run_dir = os.getcwd() # Hydra sets this
-        print(f"Output directory for fold {test_fold}: {current_run_dir}")
+        current_run_dir = os.getcwd() # Hydra sets this (main output dir for the entire run if not sweeping over folds)
+        
+        # Create a specific output directory for this fold's artifacts
+        fold_output_dir = os.path.join(current_run_dir, str(test_fold))
+        os.makedirs(fold_output_dir, exist_ok=True)
+        print(f"Output directory for fold {test_fold}: {fold_output_dir}")
 
         # Initialize WandB for the current fold if enabled
         run = None # Initialize run to None
@@ -282,17 +291,51 @@ def main(cfg: DictConfig):
 
             # --- Data Loading ---
             # Use absolute data path and cfg for parameters
-            # Pass required parameters from cfg to ESC50 constructor via partial
-            get_fold_dataset = partial(ESC50,
-                                       root=data_path,
+            
+            dataset_class_to_use = None
+            if cfg.data.dataset_type == "in_memory":
+                dataset_class_to_use = InMemoryESC50
+                print("Using InMemoryESC50 dataset.")
+            elif cfg.data.dataset_type == "standard":
+                dataset_class_to_use = ESC50
+                print("Using standard ESC50 dataset.")
+            else:
+                raise ValueError(f"Unsupported dataset_type: {cfg.data.dataset_type}")
+
+            # Pass required parameters from cfg to the selected dataset constructor via partial
+            get_fold_dataset = partial(dataset_class_to_use,
+                                       root=data_path, # Original data path, used for download if needed
                                        sr=cfg.data.sr,
                                        n_mels=cfg.data.n_mels,
                                        hop_length=cfg.data.hop_length,
                                        val_size=cfg.training.val_size,
-                                       # n_mfcc=cfg.data.get('n_mfcc', None), # Pass n_mfcc if defined in data config
-                                       download=True, # Keep download=True? Or make configurable?
+                                       n_mfcc=cfg.data.get('n_mfcc', None), # Pass n_mfcc if defined
+                                       download=cfg.data.get('download', True), # Make download configurable, default True
                                        test_folds={test_fold},
-                                       global_mean_std=global_stats[test_fold - 1]) # Still using hardcoded stats
+                                       prob_aug_wave=cfg.data.get('prob_aug_wave', 0.0),
+                                       prob_aug_spec=cfg.data.get('prob_aug_spec', 0.0),
+                                       # global_mean_std will be set based on dataset_class_to_use
+                                       num_aug=cfg.data.num_aug, # Pass num_aug
+                                       # Conditional parameters for standard ESC50's external preprocessing
+                                       use_preprocessed_data=cfg.data.get('use_preprocessed_data', False) if dataset_class_to_use == ESC50 else False,
+                                       preprocessed_data_root=hyu.to_absolute_path(cfg.data.preprocessed_data_path) if dataset_class_to_use == ESC50 and cfg.data.get('use_preprocessed_data', False) and cfg.data.get('preprocessed_data_path') else None
+                                       )
+            
+            # Determine current training folds for stats calculation
+            current_train_folds_for_stats = all_available_folds - {test_fold}
+            
+            # Calculate or load stats for the current training folds
+            # Note: Add caching mechanism here if desired for performance
+            fold_mean, fold_std = calculate_fold_descriptive_stats(cfg, data_path, current_train_folds_for_stats, all_available_folds)
+            current_fold_global_mean_std = (fold_mean, fold_std)
+
+            # Update the partial function with the dynamically calculated stats
+            if dataset_class_to_use == InMemoryESC50:
+                # InMemoryESC50 expects global_mean_std_for_norm for applying normalization after loading from cache
+                get_fold_dataset = partial(get_fold_dataset.func, **get_fold_dataset.keywords, global_mean_std_for_norm=current_fold_global_mean_std)
+            else: # For standard ESC50
+                get_fold_dataset = partial(get_fold_dataset.func, **get_fold_dataset.keywords, global_mean_std=current_fold_global_mean_std)
+
 
             train_set = get_fold_dataset(subset="train")
             print('*****')
@@ -397,13 +440,15 @@ def main(cfg: DictConfig):
 
             # --- Training ---
             print("\n--- Starting Training ---")
-            # Pass all required arguments to fit_classifier
-            fit_classifier(cfg, model, train_loader, val_loader, criterion, optimizer, scheduler, device, current_run_dir, float_fmt)
+            # Pass fold_output_dir to fit_classifier
+            fit_classifier(cfg, model, train_loader, val_loader, criterion, optimizer, scheduler, device, fold_output_dir, float_fmt)
             print("--- Training Finished ---")
 
 
             # --- Testing ---
-            print("\n--- Starting Testing ---")
+            # This internal testing block evaluates the model trained for the current fold.
+            # test_crossval.py is for testing pre-existing models from a completed training run.
+            print("\n--- Starting Testing for current fold ---")
             test_loader = torch.utils.data.DataLoader(get_fold_dataset(subset="test"),
                                                       batch_size=cfg.training.batch_size, # Use cfg (or define test batch size)
                                                       shuffle=False,
@@ -411,11 +456,11 @@ def main(cfg: DictConfig):
                                                       drop_last=False,
                                                       )
 
-            # Load the best model saved by EarlyStopping for testing
-            best_model_path = os.path.join(current_run_dir, 'best_val_loss.pt')
-            if os.path.exists(best_model_path):
-                 print(f"Loading best model from: {best_model_path}")
-                 model.load_state_dict(torch.load(best_model_path)) # Load best model state
+            # Load the best model saved by EarlyStopping for this fold for testing
+            best_model_fold_path = os.path.join(fold_output_dir, 'best_val_loss.pt') # Path to this fold's best model
+            if os.path.exists(best_model_fold_path):
+                 print(f"Loading best model for fold {test_fold} from: {best_model_fold_path}")
+                 model.load_state_dict(torch.load(best_model_fold_path)) # Load best model state
             else:
                  print("Warning: best_val_loss.pt not found. Testing with the terminal model.")
                  # If best model isn't found, the model variable holds the terminal state

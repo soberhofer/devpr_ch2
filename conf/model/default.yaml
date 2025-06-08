@@ -1,7 +1,7 @@
 # Repo/conf/model/default.yaml
 # Default model configuration
 
-name: AudioMLP # Name of the model class/constructor
+name: ResNet18 # Name of the model class/constructor
 
 # Parameters for the AudioMLP model
 # Note: n_mels and output_size are interpolated from the data config
@@ -12,3 +12,4 @@ params:
   hidden2_size: 128
   output_size: ${data.n_classes} # Interpolated from data config
   time_reduce: 1
+  dropout_prob: 0.1
