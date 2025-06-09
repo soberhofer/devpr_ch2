@@ -208,15 +208,18 @@ def main(cfg: DictConfig):
             print(scores[test_fold][model_file_name])
         
         if scores[test_fold]: # Check if dict is not empty
-            scores[test_fold] = pd.concat(scores[test_fold])
-            # Save fold-specific scores in the current Hydra run's output directory (or a subfolder)
-            # For now, let's assume test_crossval is run once, and its CWD is the main output dir for this test session.
-            # If test_crossval itself is run per fold by an outer script, this path needs care.
-            # Assuming test_crossval is run for a specific training output (experiment_root).
-            # We can save these detailed fold scores within experiment_root/fold_X or in CWD of test_crossval.
-            # Let's save them in the original experiment_fold_path for now.
-            scores[test_fold].to_csv(os.path.join(experiment_fold_path, 'test_scores_per_checkpoint.csv'),
-                                     index_label=['checkpoint', 'metric'], header=['value'])
+            # Concatenate scores for the current fold (contains both best_val_loss and terminal)
+            concatenated_fold_scores = pd.concat(scores[test_fold]) 
+            scores[test_fold] = concatenated_fold_scores # Store the concatenated df for later aggregation
+
+            # Save fold-specific scores ONLY for terminal.pt if it exists in this fold's scores
+            if "terminal.pt" in concatenated_fold_scores.index.get_level_values(0):
+                terminal_fold_scores = concatenated_fold_scores.loc["terminal.pt"]
+                terminal_fold_scores.to_csv(os.path.join(experiment_fold_path, 'test_scores_terminal_checkpoint_fold.csv'),
+                                         header=['value']) # Simpler CSV for single checkpoint
+            # else, if you want to save for all checkpoints for this fold, revert to:
+            # scores[test_fold].to_csv(os.path.join(experiment_fold_path, 'test_scores_per_checkpoint.csv'),
+            #                          index_label=['checkpoint', 'metric'], header=['value'])
         else:
             print(f"No checkpoints found or tested for fold {test_fold}.")
 
@@ -233,23 +236,43 @@ def main(cfg: DictConfig):
     # (which is managed by Hydra if test_crossval.py is the entry point)
     output_dir = os.getcwd() # Hydra's current working directory for this run
     
-    for model_file_name in cfg.testing.checkpoints:
-        file_name_prefix = os.path.splitext(model_file_name)[0]
-        # Save probs aggregated across folds for this checkpoint
-        # Check if probs[model_file_name] is not empty
-        if probs[model_file_name]:
-            probs_df = pd.DataFrame(probs[model_file_name]).T
-            probs_df.to_csv(os.path.join(output_dir, f'test_probs_{file_name_prefix}_agg.csv'))
-        
-        # Save scores aggregated across folds for this checkpoint
-        if model_file_name in final_scores_df.columns.get_level_values(0): # Check if checkpoint exists in scores
-            scores_for_checkpoint_df = final_scores_df[model_file_name]
-            scores_for_checkpoint_df.to_csv(os.path.join(output_dir, f'test_scores_{file_name_prefix}_agg.csv'))
+    terminal_checkpoint_name = "terminal.pt"
+    terminal_file_prefix = os.path.splitext(terminal_checkpoint_name)[0]
 
-    print("\nAggregated Test Results:")
+    # Save probs aggregated across folds ONLY for the terminal checkpoint
+    if terminal_checkpoint_name in probs and probs[terminal_checkpoint_name]:
+        terminal_probs_df = pd.DataFrame(probs[terminal_checkpoint_name]).T
+        terminal_probs_df.to_csv(os.path.join(output_dir, f'test_probs_{terminal_file_prefix}_agg.csv'))
+        print(f"\nAggregated probabilities for {terminal_checkpoint_name} saved to CSV.")
+    else:
+        print(f"\nNo probabilities found or to save for {terminal_checkpoint_name}.")
+
+    # Save scores aggregated across folds ONLY for the terminal checkpoint
+    # final_scores_df contains aggregated scores for ALL checkpoints tested.
+    # We will print the full summary but save only the terminal part.
+    print("\nFull Aggregated Test Results (all checkpoints tested):")
     print(final_scores_df)
-    final_scores_df.to_csv(os.path.join(output_dir, 'test_scores_summary_all_checkpoints.csv'))
-    print(f"\nAll test outputs saved in: {output_dir}")
+    
+    if terminal_checkpoint_name in final_scores_df.columns.get_level_values(0):
+        terminal_scores_agg_df = final_scores_df[terminal_checkpoint_name]
+        terminal_scores_agg_df.to_csv(os.path.join(output_dir, f'test_scores_{terminal_file_prefix}_agg.csv'))
+        print(f"\nAggregated scores for {terminal_checkpoint_name} saved to CSV.")
+        
+        # Save a summary that only includes terminal.pt if that's desired for the main summary file
+        # For example, create a new DataFrame for just terminal scores for the summary
+        summary_terminal_only_df = pd.DataFrame({terminal_checkpoint_name: terminal_scores_agg_df})
+        summary_terminal_only_df.to_csv(os.path.join(output_dir, 'test_scores_summary_terminal_only.csv'))
+        print(f"Summary CSV for {terminal_checkpoint_name} only saved.")
+
+    else:
+        print(f"\nNo aggregated scores found for {terminal_checkpoint_name} in final_scores_df.")
+
+    # If you want to keep the original summary of all checkpoints:
+    # final_scores_df.to_csv(os.path.join(output_dir, 'test_scores_summary_all_checkpoints.csv'))
+    
+    print(f"\nTest outputs for '{terminal_checkpoint_name}' (and terminal-only summary) saved in: {output_dir}")
+    if "best_val_loss.pt" in cfg.testing.checkpoints:
+        print(f"Results for 'best_val_loss.pt' were printed to terminal but not saved to aggregated CSVs.")
 
 
 if __name__ == "__main__":
