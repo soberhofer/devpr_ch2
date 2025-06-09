@@ -11,8 +11,8 @@ from omegaconf import DictConfig, OmegaConf
 import hydra.utils as hyu
 from functools import partial
 
-from dataset.dataset_ESC50 import ESC50, InMemoryESC50, download_extract_zip
-from train_crossval import test, make_model, global_stats
+from dataset.dataset_ESC50 import ESC50, InMemoryESC50, download_extract_zip, calculate_fold_descriptive_stats
+from train_crossval import test, make_model # Removed global_stats import
 # import config # Removed config import
 
 
@@ -100,7 +100,6 @@ def main(cfg: DictConfig):
 
     # instantiate model
     print('*****')
-    print("WARNING: Using hardcoded global mean and std. Depends on feature settings!")
     # Model instantiation will be changed to make_model(cfg)
     model = make_model(cfg) # Changed to pass full cfg
     model = model.to(device)
@@ -113,6 +112,8 @@ def main(cfg: DictConfig):
     # Initialize probs dictionary based on checkpoints from Hydra config
     probs = {model_file_name: {} for model_file_name in cfg.testing.checkpoints}
     
+    all_available_folds = set(range(1, cfg.data.folds + 1))
+
     for test_fold in cfg.data.test_folds: # Use Hydra config
         # experiment here refers to the specific fold directory within experiment_root
         experiment_fold_path = os.path.join(experiment_root, str(test_fold))
@@ -142,7 +143,7 @@ def main(cfg: DictConfig):
                                    n_mfcc=cfg.data.get('n_mfcc', None),
                                    download=cfg.data.get('download', True),
                                    test_folds={test_fold},
-                                   global_mean_std=global_stats[test_fold - 1], # Ensure global_stats is available
+                                   # global_mean_std will be set dynamically below
                                    # Params for InMemoryESC50 / standard ESC50 compatibility
                                    num_aug=0, # No augmentation for test
                                    prob_aug_wave=0.0,
@@ -150,8 +151,25 @@ def main(cfg: DictConfig):
                                    val_size=0, # Not used for test set
                                    use_preprocessed_data=cfg.data.get('use_preprocessed_data', False) if dataset_class_to_use == ESC50 else False,
                                    preprocessed_data_root=hyu.to_absolute_path(cfg.data.preprocessed_data_path) if dataset_class_to_use == ESC50 and cfg.data.get('use_preprocessed_data', False) and cfg.data.get('preprocessed_data_path') else None
+                                   # The global_mean_std or global_mean_std_for_norm will be added after calculation
                                    )
 
+        # Determine the training folds that correspond to this test_fold's model
+        training_folds_for_this_model = all_available_folds - {test_fold}
+        print(f"For test_fold {test_fold}, model was trained on folds: {training_folds_for_this_model}")
+        
+        # Calculate normalization statistics based on these training folds
+        current_fold_mean, current_fold_std = calculate_fold_descriptive_stats(
+            cfg, data_path, training_folds_for_this_model, all_available_folds
+        )
+        current_fold_global_mean_std = (current_fold_mean, current_fold_std)
+
+        # Update the partial function with the dynamically calculated stats
+        if dataset_class_to_use == InMemoryESC50:
+            get_test_dataset = partial(get_test_dataset.func, **get_test_dataset.keywords, global_mean_std_for_norm=current_fold_global_mean_std)
+        else: # For standard ESC50
+            get_test_dataset = partial(get_test_dataset.func, **get_test_dataset.keywords, global_mean_std=current_fold_global_mean_std)
+            
         test_loader = torch.utils.data.DataLoader(get_test_dataset(), # Call partial to get dataset instance
                                                   batch_size=cfg.testing.batch_size, # Use Hydra config
                                                   shuffle=False,
