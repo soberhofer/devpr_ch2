@@ -1,3 +1,11 @@
+Link to wandb to see our results: https://wandb.ai/soberhofer/challenge2
+
+**Important Notes on Running Scripts:**
+- The `test_crossval.py` script automatically finds the latest experiment results if no specific path is provided. You can override this by setting `testing.cvpath=/path/to/your/results/folder` via Hydra.
+- For logging to Weights & Biases (`wandb`):
+    - Ensure the `WANDB_API_KEY` environment variable is set.
+    - Alternatively, you can disable wandb logging by running scripts with `use_wandb=false` (e.g., `python train_crossval.py use_wandb=false`).
+
 # Sound Classification on ESC-50 Dataset
 
 This repository contains code and experiments for sound classification on the ESC-50 dataset. The goal is to classify audio recordings into one of 50 environmental sound classes.
@@ -53,5 +61,10 @@ The model will output the classification results for each fold, including metric
 To test all cross-validation folds use the following command:
 
 ```bash
-python test_crossval.py results/EXPERIMENT_DIR
+python test_crossval.py
 ```
+By default, this script will attempt to find the latest training run in the `results/` directory. You can specify a particular experiment directory using Hydra:
+```bash
+python test_crossval.py testing.cvpath=results/YYYY-MM-DD/HH-MM-SS
+```
+(Replace `YYYY-MM-DD/HH-MM-SS` with the actual path to your experiment results).
