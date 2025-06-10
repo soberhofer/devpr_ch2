@@ -1,4 +1,5 @@
 Link to wandb to see our results: https://wandb.ai/soberhofer/challenge2
+The run which was submitted to the last leaderboard was the Job with Slurm ID 3128.
 
 **Important Notes on Running Scripts:**
 - The `test_crossval.py` script automatically finds the latest experiment results if no specific path is provided. You can override this by setting `testing.cvpath=/path/to/your/results/folder` via Hydra.
